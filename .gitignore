@@ -153,6 +153,7 @@ activemq-data/
 .env
 .envrc
 .venv
+.reco/
 env/
 venv/
 ENV/
@@ -218,3 +219,25 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+@"
+
+# --- RecoSphere: data, models, run outputs (regenerable, never commit) ---
+data/
+models/
+*.pt
+*.npy
+*.index
+*.parquet
+*.jsonl
+mlflow.db
+mlruns/
+mlartifacts/
+ab_logs/
+ab_runs/
+logs/
+data_ci/
+results/Synthetic/
+"@ | Add-Content .gitignore
+
+"*.sh text eol=lf" | Set-Content .gitattributes

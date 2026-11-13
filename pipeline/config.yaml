@@ -1,0 +1,67 @@
+# RecoSphere training pipeline config.
+# Override any value from the CLI:  python -m pipeline.run --set two_tower.epochs=2 --set gate.max_point_drop=0.03
+
+category: Video_Games
+namespace: null             # null = real production. Replay (7e) uses e.g. replay/<name> -> own runs + pointer
+
+split:
+  mode: gold                 # gold = notebook 02 split (reproduces notebook numbers)
+                             # cutoff = time-travel (Phase 7e): test = [cutoff, cutoff+test_days)
+  cutoff: null               # "2022-01-01" when mode = cutoff
+  val_days: 365
+  test_days: 180
+
+two_tower:                   # notebook 03 decisions
+  variant: id_content        # id_only | content_only | id_content | id_content_age
+  epochs: 4                  # notebook 03 val-tuned best epoch for id_content
+  seed: 42
+  text_encoder: minilm       # must match data/gold/<cat>/item_text_emb_<encoder>.npy
+  hist_len: 20
+  dim: 64
+  tau: 0.07
+  batch_size: 2048
+  lr: 0.002
+  weight_decay: 0.00001
+  id_dropout: 0.5
+
+index:                       # notebook 04 decision (L1: exact search is within budget)
+  type: flat                 # flat | hnsw | ivf | ivfpq
+  knob: null                 # hnsw efSearch / ivf nprobe
+  k_search: 200
+
+ranker:                      # notebook 05 decisions
+  n_tt: 200
+  n_pop: 100
+  recent_frac: 0.1
+  max_train_users: 20000
+  n_estimators: 1000
+  learning_rate: 0.05
+  num_leaves: 63
+  min_child_samples: 50
+  early_stopping: 50         # legacy single-split early stopping (cv_folds: 0)
+  cv_folds: 3                # Phase 7 fix: #trees from the MEAN validation curve of K user folds, then refit on all users
+  cv_patience: 100           # per-fold early stopping patience (long, so a noisy early peak does not end the curve)
+  seed: 42
+
+serving:
+  new_item_slots: 2          # notebook 06 decision
+
+gate:
+  # Regression test, paired by user (Phase 7d). Per metric, bootstrap the per-user difference
+  # (candidate - production) on the SAME test users -> relative change + 95% CI. Block if EITHER
+  #   (a) confidently worse:  CI upper bound < -min_effect   (we are sure it lost more than min_effect)
+  #   (b) big point drop:     change < -max_point_drop       (safety net when the CI is too wide to be sure)
+  # Why not "prove it is not worse" (non-inferiority)? With sparse metrics like NDCG@10 the CI is so wide
+  # that even an identical model cannot prove it -> every retrain would be blocked.
+  min_effect: 0.01
+  max_point_drop: 0.05
+  confidence: 0.95
+  bootstrap: 2000
+  seed: 0
+  metrics: [ranker/all/ndcg@10, ranker/all/recall@100, candidates/recall_union]
+  must_beat_baseline: true   # ranker must beat recent popularity on the same window
+
+mlflow:
+  enabled: true
+  tracking_uri: sqlite:///mlflow.db     # relative to the repo root
+  experiment: recosphere

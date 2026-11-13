@@ -1,0 +1,13 @@
+data/
+models/
+results/
+notebooks/
+loadtest/
+.venv/
+.reco/
+**/__pycache__/
+**/.ipynb_checkpoints/
+*.zip
+mlflow.db
+mlartifacts/
+mlruns/

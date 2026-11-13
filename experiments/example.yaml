@@ -1,0 +1,10 @@
+# Copy to experiments/active.yaml to start an experiment (the API picks it up within MODEL_WATCH_SECONDS).
+# Delete active.yaml (or enabled: false) to stop it. Change the salt for every NEW experiment.
+name: ranker-seed2-vs-prod
+salt: ranker-seed2-vs-prod-v1
+enabled: true
+arms:
+  - {name: control,   model: production,               traffic: 0.5}
+  - {name: treatment, model: runs/20261112-045228,     traffic: 0.5}
+  # per-arm serving override example (policy test instead of model test):
+  # - {name: no_new_slots, model: production, traffic: 0.5, new_item_slots: 0}   # pinned copy of production

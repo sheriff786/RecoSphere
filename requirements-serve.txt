@@ -1,0 +1,14 @@
+# Serving image only (no Spark / Jupyter / sentence-transformers).
+# torch comes from the CPU index (see Dockerfile) — much smaller than the CUDA build.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+redis>=5.0
+numpy>=1.26
+pandas>=2.1,<3
+polars>=1.20
+scipy>=1.11
+faiss-cpu>=1.8
+lightgbm>=4.0
+torch>=2.2
+pyyaml>=6            # Phase 8: experiment config
+prometheus_client>=0.20   # Phase 7g: /metrics

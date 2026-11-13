@@ -1,0 +1,6 @@
+# CI (GitHub Actions): tests + synthetic end-to-end smoke test. CPU torch comes from the extra index.
+-r requirements-serve.txt
+pyarrow>=15
+scikit-learn>=1.4
+pyyaml>=6
+pytest>=8

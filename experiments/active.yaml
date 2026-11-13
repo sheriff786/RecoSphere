@@ -1,0 +1,5 @@
+name: new-slots-2-vs-0
+salt: new-slots-2-vs-0-v1
+arms:
+  - {name: control, model: production, traffic: 0.5}
+  - {name: no_new_slots, model: production, traffic: 0.5, new_item_slots: 0}

@@ -1,0 +1,56 @@
+# docker compose up --build
+#   API        http://localhost:8000      (/health, /recommend/<user>, /metrics)
+#   Prometheus http://localhost:9090      (alerts: http://localhost:9090/alerts)
+#   Grafana    http://localhost:3000      (admin / admin -> dashboard "RecoSphere serving")
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1000", "--appendonly", "no"]
+    ports: ["6379:6379"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      RANKFORGE_CATEGORY: Video_Games
+      REDIS_URL: redis://redis:6379/0
+      NEW_ITEM_SLOTS: "2"
+      SERVE_THREADS: "1"
+      API_WORKERS: "4"            # one Python process ~ one core (GIL); set to about your core count
+      MODEL_WATCH_SECONDS: "10"   # Phase 7d: follow models/<cat>/production.json, hot-swap without restart
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}   # optional: protects POST /admin/reload
+    volumes:
+      - ./data/gold:/app/data/gold:ro
+      - ./models:/app/models:ro
+      - ./experiments:/app/experiments:ro      # Phase 8: experiments/active.yaml
+      - ./ab_logs:/app/ab_logs                 # Phase 8: exposure + click logs (written by the API)
+    ports: ["8000:8000"]
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports: ["9090:9090"]
+    depends_on: [api]
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+    depends_on: [prometheus]
+
+volumes:
+  redis-data:

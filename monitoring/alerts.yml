@@ -1,0 +1,56 @@
+# Alert rules (Phase 7g). Thresholds come from what we measured: p95 ~8 ms per request single-user,
+# ~30 ms under load (Phase 6 load test) -> 50 ms SLO leaves headroom; anything above = real problem.
+groups:
+  - name: recosphere-serving
+    rules:
+      - alert: HighLatencyP95
+        expr: histogram_quantile(0.95, sum by (le) (rate(recosphere_request_seconds_bucket[5m]))) > 0.05
+        for: 5m
+        labels: {severity: page}
+        annotations:
+          summary: "p95 recommend latency above 50 ms for 5 min"
+          runbook: "Check stage_seconds panel (which stage?), CPU, API_WORKERS, a recent model swap."
+
+      - alert: RecommendErrors
+        expr: sum(rate(recosphere_errors_total{kind="recommend"}[5m])) / clamp_min(sum(rate(recosphere_requests_total[5m])), 1e-9) > 0.001
+        for: 5m
+        labels: {severity: page}
+        annotations:
+          summary: "more than 0.1% of requests fall back to the popular list because of an error"
+          runbook: "API logs 'recommend failed'. Users still get a list, but not a personalized one."
+
+      - alert: FallbackShareJump
+        expr: |
+          (sum(rate(recosphere_requests_total{source="fallback"}[15m])) or vector(0)) / clamp_min(sum(rate(recosphere_requests_total[15m])), 1e-9)
+            > 2 * (sum(rate(recosphere_requests_total{source="fallback"}[1d] offset 1d)) / clamp_min(sum(rate(recosphere_requests_total[1d] offset 1d)), 1e-9))
+        for: 30m
+        labels: {severity: ticket}
+        annotations:
+          summary: "share of users without history doubled vs yesterday"
+          runbook: "Feature store lost users (Redis flushed? wrong data_version?) or a traffic source changed."
+
+      - alert: ModelReloadFailed
+        expr: increase(recosphere_model_reloads_total{result="failed"}[15m]) > 0
+        labels: {severity: ticket}
+        annotations:
+          summary: "a promoted model failed to load / smoke test; the old model is still serving"
+          runbook: "GET /health -> last_reload_error. Roll back: python -m pipeline.run --rollback"
+
+      - alert: WorkersOnDifferentModels
+        expr: count(max by (model_run) (recosphere_model_info == 1)) > 1
+        for: 10m
+        labels: {severity: ticket}
+        annotations:
+          summary: "workers serve different models for >10 min (a hot-swap is stuck on some workers)"
+
+      - alert: TopScoreDrift
+        expr: |
+          abs(
+            histogram_quantile(0.5, sum by (le) (rate(recosphere_top_score_bucket[1h])))
+            - histogram_quantile(0.5, sum by (le) (rate(recosphere_top_score_bucket[1d] offset 1d)))
+          ) > 1
+        for: 1h
+        labels: {severity: ticket}
+        annotations:
+          summary: "median #1 ranker score moved by > 1 vs yesterday: model or feature drift"
+          runbook: "Expected right after a promotion (new model, new score scale). Otherwise check feature store / item state."
