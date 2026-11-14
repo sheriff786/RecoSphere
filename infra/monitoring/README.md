@@ -10,7 +10,7 @@ docker compose -f infra/compose/docker-compose.yml up --build   # repo root se
 |---|---|
 | API metrics (raw) | http://localhost:8000/metrics |
 | Prometheus (queries, alerts) | http://localhost:9090 , http://localhost:9090/alerts |
-| Grafana dashboard "RecoSphere serving" | http://localhost:3000 (anonymous view; admin login: admin / admin) |
+| Grafana dashboard "RecoSphere serving" | http://localhost:3001 (anonymous view; admin login: admin / admin) |
 
 **Dashboard me 12 panels hain:**
 - model served, RPS, p95, error share
