@@ -43,7 +43,16 @@ Admin login: `admin@recosphere.dev` / `ADMIN_PASSWORD` from `.env.local` (seeded
 `npm run build && node .next/standalone/server.js` (after copying `.next/static` and `public` next to it,
 as the Dockerfile does), or `make up` from the repo root (app on :3000; `make up-all` adds Grafana on :3001).
 
-## Tested (synthetic engine data, Playwright, Chromium)
+## Tested
+
+**Automated (P0):** `web/e2e/app.spec.ts` (Playwright, Chromium). `make e2e` runs it against the running
+stack (`make up`, real data; never rolls back); `make e2e-synthetic` / CI job `e2e` runs it on a throwaway synthetic
+stack including **Roll back** (`scripts/e2e_stack.sh`). Covers: logged-out redirect + 401s, signup → onboarding (3 picks)
+→ personalized feed → game page with "Why this?" → Play → feed changes (played game gone, "Because you played"),
+sign out/in, non-admin 403, admin dashboard, roll back + hot swap. Every page must have 0 browser console errors,
+and redirects must stay on the same origin.
+
+**Manual run before P0 (synthetic engine data, Playwright, Chromium):**
 
 Every step was run and passed with 0 browser console errors. Screenshots are in the delivery:
 - sign up → onboarding (4 picks) → personalized home

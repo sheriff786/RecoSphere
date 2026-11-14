@@ -57,7 +57,9 @@ services:
     volumes:
       - web-data:/app/data
     ports: ["${WEB_PORT:-3000}:3000"]
-    depends_on: [api]
+    depends_on:
+      api:
+        condition: service_healthy   # engine loads models for 1-2 min; before that every page would 500
 
   # ------------------------------------------------------------------------------------------ obs
   prometheus:

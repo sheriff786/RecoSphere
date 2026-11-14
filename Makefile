@@ -2,6 +2,7 @@
 #   make up       core: web app :3000, engine :8000, redis        make up-all   + obs (Prometheus, Grafana)
 #   make down     stop everything (volumes are kept)              make test     unit tests
 #   make smoke    whole system on synthetic data (no Docker)      make config   validate compose for every profile
+#   make e2e      Playwright against the running stack            make e2e-synthetic   same on a throwaway stack (CI)
 # Config: .env (created from .env.example on first use). Profiles: see infra/compose/docker-compose.yml.
 
 COMPOSE  := docker compose -f infra/compose/docker-compose.yml --env-file .env
@@ -9,10 +10,10 @@ PROFILES := obs
 PY       ?= python
 
 .DEFAULT_GOAL := help
-.PHONY: help up up-all down logs ps test smoke config
+.PHONY: help up up-all down logs ps test smoke config e2e e2e-synthetic
 
 help:            ## list the targets
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/'
+	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/'
 
 .env:            # first run: start from the template (never overwrites an existing .env)
 	cp .env.example .env
@@ -39,6 +40,12 @@ test:            ## unit tests
 
 smoke:           ## end-to-end smoke test on synthetic data (pipeline -> gate -> engine -> parity -> A/B)
 	bash scripts/ci_smoke.sh
+
+e2e:             ## browser e2e (Playwright) against the running stack: make up first. Never rolls back.
+	cd web && npx playwright test
+
+e2e-synthetic:   ## browser e2e on a throwaway synthetic stack, incl. roll back (what CI runs; no Docker)
+	bash scripts/e2e_stack.sh
 
 config:          ## validate the compose file for core and for every profile (no daemon needed)
 	docker compose -f infra/compose/docker-compose.yml --env-file .env.example config --quiet

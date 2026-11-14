@@ -21,7 +21,7 @@ export default function GameCard({ game, rid, why, size = "md" }: {
       <div className="overflow-hidden rounded-xl ring-1 ring-white/10 transition duration-200 group-hover:-translate-y-1 group-hover:ring-2 group-hover:ring-violet-400/80 group-hover:shadow-[0_10px_40px_-10px_rgba(139,92,246,0.7)]">
         <Cover title={game.title} platform={game.platforms?.[0]} isNew={game.is_new} className="block aspect-[3/4] w-full" />
       </div>
-      <div className="mt-2 line-clamp-2 text-sm font-medium text-zinc-100" title={game.title}>{game.title}</div>
+      <div className="mt-2 line-clamp-2 text-sm font-medium text-zinc-100" title={game.title} data-testid="card-title">{game.title}</div>
       <div className="mt-0.5 text-xs text-zinc-400">
         {[game.year, ...(game.platforms ?? [])].filter(Boolean).join(" · ") || " "}
       </div>

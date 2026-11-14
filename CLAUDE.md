@@ -51,6 +51,7 @@ python -m serve.parity_check --n 300
 cd web; npm run dev                                   # app on :3000 (needs .env.local from .env.example)
 bash scripts/ci_smoke.sh                              # whole system on synthetic data (WSL / Git Bash)
 make up / up-all / down / config / help               # Docker stack (Git Bash); config: .env from .env.example
+make e2e            # Playwright vs the running stack (no rollback)   make e2e-synthetic   # throwaway stack, = CI job e2e
 ```
 
 ## Rules learned the hard way (do not regress)
@@ -69,6 +70,11 @@ make up / up-all / down / config / help               # Docker stack (Git Bash);
   sent users to `localhost` and lost the cookie).
 - **.gitignore:** the root has `lib/` (Python template), so `!web/lib/` must stay. `data/` FILES are
   ignored, `data/*.py` are not.
+- **E2E:** run the app bound to `0.0.0.0` (as in Docker). Bound to `127.0.0.1`, Next rewrites it to `localhost` in
+  redirects (another origin). Rollback in e2e only with `E2E_ALLOW_ROLLBACK=1` on a throwaway stack.
+- **Laptop (16 GB):** do not train (smoke/e2e-synthetic) while the real `make up` stack runs: paging file runs out
+  (torch segfault / CUDA OOM). `make down` first. Rebuild one service with `up --no-deps <svc>` or compose
+  recreates the engine too (1-2 min model load).
 - Kill Next with `next-server`, not `next start` (the process name differs), or old code keeps serving.
 
 ## Next
