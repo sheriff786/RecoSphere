@@ -78,5 +78,5 @@ make e2e            # Playwright vs the running stack (no rollback)   make e2e-s
 - Kill Next with `next-server`, not `next start` (the process name differs), or old code keeps serving.
 
 ## Next
-See `docs/HANDOFF.md` → Phase **P0 (foundation)**. Target layout + P0 checklist: `docs/platform/REPO_STRUCTURE.md`.
+P0 (foundation) is done. See `docs/HANDOFF.md` → Phase **P1 (Postgres)**. Target layout: `docs/platform/REPO_STRUCTURE.md`.
 Build cycle per phase: concept (Hinglish) → code → unit tests → integration test → automated demo → commit + CI green.

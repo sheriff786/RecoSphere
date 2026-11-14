@@ -62,7 +62,7 @@ stack → 5. demo = the phase's definition of done (automated) → 6. commit, CI
 - [x] split `serve/app.py` into `serve/routers/*` (no behaviour change; all tests + smoke test pass)
 - [x] `Makefile`, `.env.example`, compose profiles (`make up` = core: web, engine, redis)
 - [x] `web/e2e/` Playwright test + `make e2e`; run it in CI against the synthetic engine
-- [ ] Done = `make up` → app + engine run; `make e2e` passes; GitHub CI green (jobs: test, web, e2e)
+- [x] Done = `make up` → app + engine run; `make e2e` passes; GitHub CI green (jobs: test, web, e2e)
 
 Local prerequisites: Docker Desktop (WSL2), Node 22, Python venv `.reco`, `make` (Git Bash/WSL or
 `choco install make`). From P5: NVIDIA Container Toolkit in WSL2 for GPU training (or CPU).
