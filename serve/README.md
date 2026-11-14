@@ -24,7 +24,8 @@ GET /recommend/{user_id}
 
 | File | Kaam |
 |---|---|
-| `serve/app.py` | FastAPI: `/health`, `/recommend/{user_id}`, `/event` |
+| `serve/app.py` | Thin: create app, lifespan, wire `serve/routers/*` (recommend, events, catalog, admin) |
+| `serve/model_manager.py`, `serve/deps.py` | Hot swap (7d); shared state + helpers for the routers |
 | `serve/recommender.py` | Startup par models + index load, phir upar wale 7 steps |
 | `serve/feature_store.py` | User state: `InMemoryStore` (dev) aur `RedisStore` (production), same interface |
 | `serve/config.py` | Saari settings environment variables se |

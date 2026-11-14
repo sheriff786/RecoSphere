@@ -3,7 +3,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
-import serve.app as A
+import serve.model_manager as A          # ModelManager + the Recommender it builds live here (P0 split)
 from serve.config import ServeConfig
 
 
