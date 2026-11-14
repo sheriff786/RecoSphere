@@ -8,7 +8,8 @@ FROM node:22-slim AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx next build
+# public/ is optional in Next.js and the app has none yet; the runtime stage copies it, so make sure it exists
+RUN mkdir -p public && npx next build
 
 FROM node:22-slim
 WORKDIR /app

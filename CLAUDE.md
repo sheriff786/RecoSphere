@@ -50,6 +50,7 @@ uvicorn serve.app:app --host 127.0.0.1 --port 8000    # engine; use 127.0.0.1, n
 python -m serve.parity_check --n 300
 cd web; npm run dev                                   # app on :3000 (needs .env.local from .env.example)
 bash scripts/ci_smoke.sh                              # whole system on synthetic data (WSL / Git Bash)
+make up / up-all / down / config / help               # Docker stack (Git Bash); config: .env from .env.example
 ```
 
 ## Rules learned the hard way (do not regress)

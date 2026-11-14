@@ -58,7 +58,7 @@ bash scripts/ci_smoke.sh             # whole system on generated synthetic data 
 # real data (needs Java for the Spark notebooks 01-02, a GPU helps for the two-tower)
 python -m pipeline.run               # train → gate → promote (MLflow: mlflow ui --backend-store-uri sqlite:///mlflow.db)
 uvicorn serve.app:app --port 8000    # GET /recommend/<user_id>, /health, /metrics
-docker compose -f infra/compose/docker-compose.yml up --build   # app :3000 · API :8000 · Grafana :3001 · Prometheus :9090
+make up                              # Docker: app :3000 · API :8000 (make up-all adds Grafana :3001, Prometheus :9090; make help)
 cd web && npm install && npm run dev # or just the app, against a running engine
 ```
 

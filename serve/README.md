@@ -75,7 +75,7 @@ curl http://localhost:8000/recommend/naya_user        # source: personalized
 Docker Desktop (WSL2 backend) chahiye.
 
 ```powershell
-docker compose -f infra/compose/docker-compose.yml up --build   # repo root se
+make up       # repo root se (Git Bash/WSL); bina make: docker compose -f infra/compose/docker-compose.yml --env-file .env up --build
 ```
 
 - Pehli build mein PyTorch (CPU) download hoga, isliye kuch minute lagenge.

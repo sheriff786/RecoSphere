@@ -3,7 +3,7 @@
 ## Monitoring
 
 ```powershell
-docker compose -f infra/compose/docker-compose.yml up --build   # repo root se
+make up-all   # repo root se (Git Bash/WSL); obs profile = Prometheus + Grafana
 ```
 
 | Kya | Kahan |

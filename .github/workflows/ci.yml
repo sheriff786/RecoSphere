@@ -28,6 +28,8 @@ jobs:
         run: python -m pytest -q
       - name: End-to-end smoke test (synthetic data)
         run: bash scripts/ci_smoke.sh
+      - name: Compose config (core + every profile) via the Makefile
+        run: make config
       - name: Promtool check (alert rules)
         run: |
           docker run --rm -v "$PWD/infra/monitoring:/m" --entrypoint promtool prom/prometheus:v2.53.0 check rules /m/alerts.yml
