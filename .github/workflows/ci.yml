@@ -30,7 +30,7 @@ jobs:
         run: bash scripts/ci_smoke.sh
       - name: Promtool check (alert rules)
         run: |
-          docker run --rm -v "$PWD/monitoring:/m" --entrypoint promtool prom/prometheus:v2.53.0 check rules /m/alerts.yml
+          docker run --rm -v "$PWD/infra/monitoring:/m" --entrypoint promtool prom/prometheus:v2.53.0 check rules /m/alerts.yml
 
   web:
     runs-on: ubuntu-latest

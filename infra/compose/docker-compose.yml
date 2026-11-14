@@ -1,8 +1,11 @@
-# docker compose up --build
+# docker compose -f infra/compose/docker-compose.yml up --build   (from the repo root)
+# Paths below are relative to THIS file (infra/compose/), which is how compose resolves them.
 #   API        http://localhost:8000      (/health, /recommend/<user>, /metrics)
 #   Prometheus http://localhost:9090      (alerts: http://localhost:9090/alerts)
 #   App        http://localhost:3000      RecoSphere Play (web/, Next.js)  admin@recosphere.dev / $ADMIN_PASSWORD
 #   Grafana    http://localhost:3001      (admin / admin -> dashboard "RecoSphere serving")
+name: recosphere   # keep the project/volume names from when this file lived at the root
+
 services:
   redis:
     image: redis:7-alpine
@@ -15,7 +18,9 @@ services:
       retries: 10
 
   api:
-    build: .
+    build:
+      context: ../..
+      dockerfile: Dockerfile
     environment:
       RANKFORGE_CATEGORY: Video_Games
       REDIS_URL: redis://redis:6379/0
@@ -25,10 +30,10 @@ services:
       MODEL_WATCH_SECONDS: "10"   # Phase 7d: follow models/<cat>/production.json, hot-swap without restart
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}   # optional: protects POST /admin/reload
     volumes:
-      - ./data/gold:/app/data/gold:ro
-      - ./models:/app/models           # rw: the app's admin 'Roll back' rewrites production.json
-      - ./experiments:/app/experiments:ro      # Phase 8: experiments/active.yaml
-      - ./ab_logs:/app/ab_logs                 # Phase 8: exposure + click logs (written by the API)
+      - ../../data/gold:/app/data/gold:ro
+      - ../../models:/app/models           # rw: the app's admin 'Roll back' rewrites production.json
+      - ../../experiments:/app/experiments:ro      # Phase 8: experiments/active.yaml
+      - ../../ab_logs:/app/ab_logs                 # Phase 8: exposure + click logs (written by the API)
     ports: ["8000:8000"]
     depends_on:
       redis:
@@ -37,8 +42,8 @@ services:
   prometheus:
     image: prom/prometheus:v2.53.0
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
     ports: ["9090:9090"]
     depends_on: [api]
 
@@ -48,13 +53,13 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
     volumes:
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports: ["3001:3000"]            # 3000 is the web app
     depends_on: [prometheus]
 
   web:
-    build: ./web
+    build: ../../web
     environment:
       ENGINE_URL: http://api:8000
       AUTH_SECRET: ${AUTH_SECRET:-change-me-local-dev-only-0123456789}

@@ -43,8 +43,9 @@ Full write-up with every number, method and incident: **[REPORT.md](REPORT.md)**
 | `serve/` | FastAPI app, feature store (memory/Redis), hot swap, experiments, `/metrics`, parity check, product API (`product.py`) |
 | `web/` | **RecoSphere Play**: Next.js game-streaming storefront on the engine (signup + cold start, personalized rows, "Why this?" from SHAP, simulated streaming that updates the feed live, admin with A/B + rollback) ([README](web/README.md)) |
 | `ab/` | traffic simulator, statistics (SRM, CUPED, power, peeking, interleaving), analysis report ([docs/AB_TESTING.md](docs/AB_TESTING.md)) |
-| `monitoring/` | Prometheus config, alert rules, Grafana dashboard |
-| `orchestration/` | Airflow DAG + Windows Task Scheduler script ([README](orchestration/README.md)) |
+| `infra/compose/` | `docker-compose.yml` (app, engine, Redis, Prometheus, Grafana) |
+| `infra/monitoring/` | Prometheus config, alert rules, Grafana dashboard |
+| `infra/airflow/` | Airflow DAG + Windows Task Scheduler notes ([README](infra/airflow/README.md)) |
 | `scripts/` | synthetic data, CI smoke test, studies, one-off repairs |
 | `tests/`, `.github/workflows/ci.yml` | unit tests + end-to-end smoke test on synthetic data |
 
@@ -57,9 +58,9 @@ bash scripts/ci_smoke.sh             # whole system on generated synthetic data 
 # real data (needs Java for the Spark notebooks 01-02, a GPU helps for the two-tower)
 python -m pipeline.run               # train → gate → promote (MLflow: mlflow ui --backend-store-uri sqlite:///mlflow.db)
 uvicorn serve.app:app --port 8000    # GET /recommend/<user_id>, /health, /metrics
-docker compose up --build            # app :3000 · API :8000 · Grafana :3001 · Prometheus :9090
+docker compose -f infra/compose/docker-compose.yml up --build   # app :3000 · API :8000 · Grafana :3001 · Prometheus :9090
 cd web && npm install && npm run dev # or just the app, against a running engine
 ```
 
 Docs: [REPORT.md](REPORT.md) · [pipeline](pipeline/README.md) · [serving](serve/README.md) ·
-[A/B testing](docs/AB_TESTING.md) · [monitoring + CI](monitoring/README.md) · [orchestration](orchestration/README.md)
+[A/B testing](docs/AB_TESTING.md) · [monitoring + CI](infra/monitoring/README.md) · [orchestration](infra/airflow/README.md)

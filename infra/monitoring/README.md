@@ -3,7 +3,7 @@
 ## Monitoring
 
 ```powershell
-docker compose up --build
+docker compose -f infra/compose/docker-compose.yml up --build   # repo root se
 ```
 
 | Kya | Kahan |

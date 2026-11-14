@@ -36,7 +36,8 @@ Real results and every incident: `REPORT.md`. A/B method: `docs/AB_TESTING.md`.
 | `serve/` | engine: `app.py` routes, `recommender.py`, `feature_store.py`, `experiments.py`, `metrics.py`, `product.py` (app API), `parity_check.py` |
 | `ab/` | simulator, stats (SRM, CUPED, power, peeking, interleaving), analyzer |
 | `web/` | Next.js 15 app: auth (SQLite now), onboarding, rows, "Why this?" (SHAP), stream player, admin |
-| `monitoring/`, `orchestration/`, `.github/workflows/ci.yml`, `scripts/` | Prometheus/Grafana/alerts, Airflow DAG, CI, smoke test |
+| `infra/compose/`, `infra/monitoring/`, `infra/airflow/` | docker-compose, Prometheus/Grafana/alerts, Airflow DAG (everything that deploys) |
+| `.github/workflows/ci.yml`, `scripts/` | CI, smoke test |
 | `docs/platform/` | productionization architecture + phased plan (P0–P10) |
 
 ## Commands (Windows PowerShell, venv `.reco`)

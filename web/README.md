@@ -41,7 +41,7 @@ npm run dev                          # http://localhost:3000
 
 Admin login: `admin@recosphere.dev` / `ADMIN_PASSWORD` from `.env.local` (seeded on first start). Production:
 `npm run build && node .next/standalone/server.js` (after copying `.next/static` and `public` next to it,
-as the Dockerfile does), or `docker compose up --build` from the repo root (app on :3000, Grafana on :3001).
+as the Dockerfile does), or `docker compose -f infra/compose/docker-compose.yml up --build` from the repo root (app on :3000, Grafana on :3001).
 
 ## Tested (synthetic engine data, Playwright, Chromium)
 

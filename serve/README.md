@@ -1,7 +1,7 @@
 # Phase 6: Serving (FastAPI + Redis + Docker)
 
 > Baad me jo add hua: hot-swap (7d, neeche), A/B experiments + exposure logs (Phase 8: `docs/AB_TESTING.md`),
-> `/metrics` + Grafana (7g: `monitoring/README.md`).
+> `/metrics` + Grafana (7g: `infra/monitoring/README.md`).
 
 Notebooks 03–06 ne models banaye. Ye folder unhe ek **live API** banata hai jo har request par top-10 deti hai.
 
@@ -31,7 +31,7 @@ GET /recommend/{user_id}
 | `serve/parity_check.py` | **Training-serving skew test**: notebook path vs API path, same top-10 aana chahiye |
 | `serve/make_loadtest_users.py` | Locust ke liye user/item lists |
 | `loadtest/locustfile.py` | Load test |
-| `Dockerfile`, `docker-compose.yml`, `requirements-serve.txt` | Container setup |
+| `Dockerfile`, `infra/compose/docker-compose.yml`, `requirements-serve.txt` | Container setup |
 | `tests/test_serving.py` | Chhote unit tests (models ki zaroorat nahi) |
 
 ## Step 0: Pehle notebooks 05 aur 06 dobara chalao
@@ -74,7 +74,7 @@ curl http://localhost:8000/recommend/naya_user        # source: personalized
 Docker Desktop (WSL2 backend) chahiye.
 
 ```powershell
-docker compose up --build
+docker compose -f infra/compose/docker-compose.yml up --build   # repo root se
 ```
 
 - Pehli build mein PyTorch (CPU) download hoga, isliye kuch minute lagenge.

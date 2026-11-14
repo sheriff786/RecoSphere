@@ -2,7 +2,7 @@
 
 Pipeline ek command me poori chalti hai (`python -m pipeline.run`), har step resume ho sakta hai, aur exit code batata hai ki kya hua (0 = promoted, 2 = gate ne mana kiya). Orchestrator ka kaam sirf itna hai: **schedule karna, fail hone par retry karna, history rakhna, aur alert karna.** Is project ke liye do option hain:
 
-| | Windows Task Scheduler (`scripts/retrain.ps1`) | Airflow DAG (`orchestration/airflow/`) |
+| | Windows Task Scheduler (`scripts/retrain.ps1`) | Airflow DAG (`infra/airflow/`) |
 |---|---|---|
 | Setup | 1 command | WSL2 ya Docker, Airflow install, scheduler + webserver |
 | Retry | poora run dobara | sirf fail hua step (pipeline steps resume hote hain) |
@@ -39,7 +39,7 @@ export AIRFLOW_HOME=~/airflow
 export RECOSPHERE_REPO=/mnt/e/Sheriff_faang/full_end_to_end_project_implementation/RecoSphere
 export RECOSPHERE_PYTHON=$HOME/reco-venv/bin/python     # project ka Linux venv (WSL me alag banana padega)
 export RECOSPHERE_API=http://127.0.0.1:8000
-mkdir -p $AIRFLOW_HOME/dags && cp $RECOSPHERE_REPO/orchestration/airflow/dags/recosphere_retrain.py $AIRFLOW_HOME/dags/
+mkdir -p $AIRFLOW_HOME/dags && cp $RECOSPHERE_REPO/infra/airflow/dags/recosphere_retrain.py $AIRFLOW_HOME/dags/
 airflow standalone                                        # UI: http://localhost:8080 (password terminal me dikhega)
 ```
 

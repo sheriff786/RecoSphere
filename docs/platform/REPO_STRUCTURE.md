@@ -58,7 +58,7 @@ stack → 5. demo = the phase's definition of done (automated) → 6. commit, CI
 "Works on my machine" is not done.
 
 ## P0 checklist
-- [ ] `infra/`: move `docker-compose.yml`, `monitoring/`, `orchestration/` (update CI + docs paths)
+- [x] `infra/`: move `docker-compose.yml`, `monitoring/`, `orchestration/` (update CI + docs paths)
 - [ ] split `serve/app.py` into `serve/routers/*` (no behaviour change; all tests + smoke test pass)
 - [ ] `Makefile`, `.env.example`, compose profiles (`make up` = core: web, engine, redis)
 - [ ] `web/e2e/` Playwright test + `make e2e`; run it in CI against the synthetic engine
