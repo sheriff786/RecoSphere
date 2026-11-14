@@ -31,5 +31,23 @@ echo "== 6. A/B simulation + analysis"
 python -m ab.simulate --api http://127.0.0.1:8099 --n-users 1500 --threads 4
 python -m ab.analyze --logs $EXPOSURE_DIR --experiment $EXPERIMENT_CONFIG --out $W/ab_report > $W/ab_report.txt; sed -n 5,8p $W/ab_report.txt
 python -c "import json,sys; r=json.load(open('$W/ab_report/report.json')); assert not r['srm']['srm'] and r['data']['orphan_clicks']==0 and r['data']['users_in_multiple_arms']==0, r['data']; print('A/B data checks ok')"
-echo "== 7. metrics"; curl -sf 127.0.0.1:8099/metrics | grep -q 'recosphere_requests_total{arm="no_slots"' && echo "metrics ok"
+echo "== 7. product API (web app)"
+python - <<'PY'
+import json, urllib.request
+B = "http://127.0.0.1:8099"
+g = lambda p: json.load(urllib.request.urlopen(B + p))
+pop = g("/catalog/popular?k=5")["items"]; assert len(pop) == 5 and pop[0]["title"], pop
+assert g("/catalog/search?q=" + pop[0]["title"].split()[0])["items"], "search empty"
+assert len(g(f"/catalog/similar/{pop[0]['item_id']}?k=5")["items"]) == 5
+u = g("/users/demo?k=3")["users"][0]["user_id"]
+ex = g(f"/explain/{u}")
+assert ex["source"] == "personalized" and any(v["reasons"] for v in ex["items"].values()), ex
+for it in pop[:3]:   # brand-new app user: 3 plays -> personalized feed
+    urllib.request.urlopen(urllib.request.Request(B + "/event", data=json.dumps({"user_id": "app:ci", "item_id": it["item_id"]}).encode(),
+                                                  headers={"content-type": "application/json"}))
+assert g("/recommend/app:ci?k=5&meta=true")["source"] == "personalized"
+assert g("/admin/summary")["health"]["model_run"] == "ci"
+print("product API ok")
+PY
+echo "== 8. metrics"; curl -sf 127.0.0.1:8099/metrics | grep -q 'recosphere_requests_total{arm="no_slots"' && echo "metrics ok"
 echo "SMOKE TEST PASSED"

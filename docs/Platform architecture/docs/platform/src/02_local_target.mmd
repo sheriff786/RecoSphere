@@ -1,0 +1,18 @@
+flowchart TB
+  U((Browser)) --> GW["Traefik gateway<br/>TLS, rate limits, routing"]
+  GW --> W["web (Next.js)<br/>x2 replicas"]
+  GW -. "admin only" .-> GF["Grafana"]
+  W --> PG[("Postgres<br/>accounts, plays")]
+  W -->|"internal: recommend, play (sync)"| E["engine (FastAPI)<br/>x2 replicas"]
+  E -- "publish: exposures, feedback, plays" --> K[["Redpanda (Kafka API)<br/>topics: exposures, feedback, events, catalog"]]
+  E <-->|"history write is SYNC<br/>(read-your-writes)"| R[("Redis<br/>online features")]
+  E -- "pull model by version" --> S3[("MinIO (S3 API)<br/>models/ registry + lake/")]
+  K --> SW["stream-worker (async)<br/>1 item popularity windows -> Redis<br/>2 lake sink -> Parquet<br/>3 catalog: embed new games -> index"]
+  SW --> R
+  SW --> S3
+  AF["Airflow (self-hosted)<br/>daily: train -> gate -> promote"] --> PJ["pipeline job container<br/>(GPU if available)"]
+  PJ -- "read lake, write run + pointer" --> S3
+  PJ --> MF["MLflow server<br/>backend Postgres, artifacts MinIO"]
+  MF --> PG
+  MF --> S3
+  E & W & SW --> OT["OpenTelemetry collector"] --> OBS["Prometheus · Tempo traces · Loki logs -> Grafana"]

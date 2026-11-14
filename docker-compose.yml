@@ -1,7 +1,8 @@
 # docker compose up --build
 #   API        http://localhost:8000      (/health, /recommend/<user>, /metrics)
 #   Prometheus http://localhost:9090      (alerts: http://localhost:9090/alerts)
-#   Grafana    http://localhost:3000      (admin / admin -> dashboard "RecoSphere serving")
+#   App        http://localhost:3000      RecoSphere Play (web/, Next.js)  admin@recosphere.dev / $ADMIN_PASSWORD
+#   Grafana    http://localhost:3001      (admin / admin -> dashboard "RecoSphere serving")
 services:
   redis:
     image: redis:7-alpine
@@ -25,7 +26,7 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}   # optional: protects POST /admin/reload
     volumes:
       - ./data/gold:/app/data/gold:ro
-      - ./models:/app/models:ro
+      - ./models:/app/models           # rw: the app's admin 'Roll back' rewrites production.json
       - ./experiments:/app/experiments:ro      # Phase 8: experiments/active.yaml
       - ./ab_logs:/app/ab_logs                 # Phase 8: exposure + click logs (written by the API)
     ports: ["8000:8000"]
@@ -49,8 +50,23 @@ services:
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
-    ports: ["3000:3000"]
+    ports: ["3001:3000"]            # 3000 is the web app
     depends_on: [prometheus]
 
+  web:
+    build: ./web
+    environment:
+      ENGINE_URL: http://api:8000
+      AUTH_SECRET: ${AUTH_SECRET:-change-me-local-dev-only-0123456789}
+      ADMIN_EMAILS: admin@recosphere.dev
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
+      ENGINE_ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      COOKIE_SECURE: "0"               # plain http on localhost/LAN; set 1 behind https
+    volumes:
+      - web-data:/app/data
+    ports: ["3000:3000"]
+    depends_on: [api]
+
 volumes:
+  web-data:
   redis-data:

@@ -36,6 +36,7 @@ from pydantic import BaseModel
 from serve import metrics as M
 from serve.config import ServeConfig
 from serve.experiments import ExperimentManager, ExposureLogger
+from serve.product import Product
 from serve.recommender import Recommender
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -158,7 +159,7 @@ def health():
 
 @app.get("/recommend/{user_id}")
 def recommend(user_id: str, k: int = Query(10, ge=1, le=50), rerank: bool = True, debug: bool = False,
-              force_arm: str | None = None):
+              force_arm: str | None = None, meta: bool = False):
     mgr = STATE["mgr"]
     t0 = time.perf_counter()
     try:
@@ -181,6 +182,9 @@ def recommend(user_id: str, k: int = Query(10, ge=1, le=50), rerank: bool = True
                            model_run=rec.model_run, source=out["source"], k=k,
                            items=[x["item_id"] for x in out["items"]], n_new=sum(bool(x["is_new"]) for x in out["items"]),
                            latency_ms=round(secs * 1e3, 2))
+    if meta:                                                    # card data for the app (title, platforms, year ...)
+        p = product(rec)
+        out["items"] = [{**p.items([x["item_id"]])[0], "score": x["score"]} for x in out["items"]]
     if not debug:
         out.pop("timings_ms", None)
     return out
@@ -215,6 +219,89 @@ def admin_reload(force: bool = False, x_admin_token: str | None = Header(default
     if mgr.cfg.admin_token and x_admin_token != mgr.cfg.admin_token:
         raise HTTPException(status_code=403, detail="bad admin token")
     return {"model": mgr.reload("admin request", force=force), "experiment": mgr.experiments.refresh(force=True)}
+
+
+# ------------------------------------------------------------------------------- product API (web app)
+def product(rec=None) -> Product:
+    """One Product view per loaded model (rebuilt automatically after a hot swap)."""
+    rec = rec or STATE["mgr"].current
+    if getattr(rec, "_product", None) is None:
+        rec._product = Product(rec)
+    return rec._product
+
+
+def _ids(s: str) -> list[str]:
+    return [x for x in (s or "").split(",") if x]
+
+
+@app.get("/catalog/items")
+def catalog_items(ids: str):
+    return {"items": product().items(_ids(ids))}
+
+
+@app.get("/catalog/popular")
+def catalog_popular(k: int = Query(24, ge=1, le=100), offset: int = Query(0, ge=0), new_only: bool = False):
+    return {"items": product().popular(k, offset, new_only)}
+
+
+@app.get("/catalog/search")
+def catalog_search(q: str, k: int = Query(24, ge=1, le=100)):
+    return {"query": q, "items": product().search(q, k)}
+
+
+@app.get("/catalog/similar/{item_id}")
+def catalog_similar(item_id: str, k: int = Query(12, ge=1, le=50), user_id: str | None = None):
+    p = product()
+    if item_id not in p.rec.iid_of:
+        raise HTTPException(status_code=404, detail=f"unknown item_id {item_id}")
+    seen = [x["item_id"] for x in p.history(user_id, k=10_000)] if user_id else []
+    return {"item_id": item_id, "items": p.similar(item_id, k, exclude=seen)}
+
+
+@app.get("/users/demo")
+def users_demo(k: int = Query(12, ge=1, le=50)):
+    return {"users": product().demo_users(k)}
+
+
+@app.get("/users/{user_id}/history")
+def user_history(user_id: str, k: int = Query(20, ge=1, le=200)):
+    return {"user_id": user_id, "items": product().history(user_id, k)}
+
+
+@app.get("/explain/{user_id}")
+def explain(user_id: str, items: str | None = None):
+    mgr = STATE["mgr"]
+    rec, _, arm, _ = mgr.experiments.route(user_id, mgr.current)   # explain with the model this user is served
+    return {"user_id": user_id, "arm": arm, "model_run": rec.model_run, **product(rec).explain(user_id, _ids(items) or None)}
+
+
+def _admin(mgr, token):
+    if mgr.cfg.admin_token and token != mgr.cfg.admin_token:
+        raise HTTPException(status_code=403, detail="bad admin token")
+
+
+@app.get("/admin/summary")
+def admin_summary(x_admin_token: str | None = Header(default=None)):
+    mgr = STATE["mgr"]
+    _admin(mgr, x_admin_token)
+    hist = []
+    hp = mgr.cfg.models_root / "production_history.jsonl"
+    if hp.exists():
+        import json as _json
+        hist = [_json.loads(x) for x in hp.read_text().splitlines() if x.strip()][-15:][::-1]
+    return {"health": mgr.current.info() | mgr.info(), "live": M.snapshot(), "production_history": hist}
+
+
+@app.post("/admin/rollback")
+def admin_rollback(x_admin_token: str | None = Header(default=None)):
+    """Point production.json at the previous model; every worker hot-swaps within MODEL_WATCH_SECONDS."""
+    mgr = STATE["mgr"]
+    _admin(mgr, x_admin_token)
+    from pipeline.config import Paths, load_config
+    from pipeline.gate import rollback
+    lines = []
+    entry = rollback(Paths(load_config(None, [f"category={mgr.cfg.category}"])), log=lines.append)
+    return {"rolled_back_to": entry["run_id"], "log": lines, "swap": mgr.reload("admin rollback")}
 
 
 @app.get("/metrics")

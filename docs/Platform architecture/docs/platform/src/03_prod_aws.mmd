@@ -1,0 +1,23 @@
+flowchart TB
+  U((Users)) --> CF["CloudFront + WAF"] --> ALB["ALB / Ingress"]
+  subgraph EKS["EKS cluster"]
+    W["web Deployment<br/>HPA on CPU"]
+    E["engine Deployment<br/>HPA on p95 / RPS"]
+    SW["stream-worker<br/>Deployment"]
+    AF["Airflow (Helm)"]
+    J["pipeline Jobs<br/>GPU node pool, spot"]
+    OBS["kube-prometheus-stack<br/>Tempo, Loki, Grafana"]
+  end
+  ALB --> W
+  W --> E
+  W --> RDS[("RDS Postgres")]
+  E <--> EC[("ElastiCache Redis")]
+  E & W --> MSK[["MSK (Kafka)"]]
+  MSK --> SW --> EC
+  SW --> S3[("S3: models/, lake/ (Iceberg/Parquet)")]
+  E -- "pull model" --> S3
+  AF --> J --> S3
+  J --> MLF["MLflow on EKS<br/>RDS + S3"]
+  SM["Secrets Manager"] -.-> W & E & J
+  ECR["ECR images"] -.-> EKS
+  GH["GitHub Actions -> ECR -> Argo CD"] -.-> EKS

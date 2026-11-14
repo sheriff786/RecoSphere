@@ -1,0 +1,27 @@
+sequenceDiagram
+  autonumber
+  participant B as Browser
+  participant W as web
+  participant E as engine
+  participant K as Redpanda
+  participant S as stream-worker
+  participant R as Redis
+  participant L as Lake (MinIO)
+  participant P as pipeline (daily)
+  B->>W: open home
+  W->>E: GET /recommend/{user}
+  E->>R: read user features
+  E-->>W: top-k + request_id + arm
+  E-)K: exposures {request_id, user, arm, model, items}
+  B->>W: Play game X
+  W->>E: POST /event {user, X}
+  E->>R: append X to history (SYNC)
+  E-->>W: ok
+  Note over B,R: read-your-writes: the very next /recommend sees X (no queue in between)
+  E-)K: events {event_id, user, X, ts} + feedback {request_id, play}
+  K-)S: consume (at-least-once)
+  S->>R: update item popularity windows (async, every few s)
+  S->>L: Parquet, partitioned by date
+  P->>L: read yesterday's events (training + A/B data)
+  P->>L: write run, gate, promote (pointer v+1)
+  E->>L: watch pointer -> pull model -> smoke test -> swap

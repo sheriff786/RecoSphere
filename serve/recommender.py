@@ -54,6 +54,10 @@ class Recommender:
         item_feat = pl.read_parquet(G / "item_features.parquet").sort("iid")
         self.item_ids = item_feat["item_id"].to_list()
         self.titles = item_feat["title"].fill_null("").to_list()
+        # for the product API (serve/product.py): item text (categories, description) + release timestamp
+        self.texts = item_feat["text"].fill_null("").to_list() if "text" in item_feat.columns else [""] * len(self.titles)
+        self.dfa_ts = (item_feat["dfa_ts"].fill_null(0).to_numpy() if "dfa_ts" in item_feat.columns
+                       else np.zeros(len(self.titles), np.int64))
         self.iid_of = {x: i for i, x in enumerate(self.item_ids)}
 
         self.model, ck, dfa_t = load_two_tower(M / "two_tower.pt", G, "cpu")

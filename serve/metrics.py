@@ -70,3 +70,51 @@ def render() -> tuple[bytes, str]:
         multiprocess.MultiProcessCollector(reg)
         return generate_latest(reg), CONTENT_TYPE_LATEST
     return generate_latest(), CONTENT_TYPE_LATEST
+
+
+def snapshot() -> dict:
+    """JSON summary of the live counters for the app's admin page (works in multi-worker mode too)."""
+    from prometheus_client import REGISTRY
+    reg = REGISTRY
+    if MULTI:
+        reg = CollectorRegistry()
+        multiprocess.MultiProcessCollector(reg)
+    req, fb, err, rel, lat = {}, {}, {}, {}, {}
+    for fam in reg.collect():
+        for s in fam.samples:
+            L = s.labels
+            if s.name == "recosphere_requests_total":
+                key = (L["arm"], L["source"])
+                req[key] = req.get(key, 0) + s.value
+            elif s.name == "recosphere_feedback_total":
+                key = (L["arm"], L["action"])
+                fb[key] = fb.get(key, 0) + s.value
+            elif s.name == "recosphere_errors_total":
+                err[L["kind"]] = err.get(L["kind"], 0) + s.value
+            elif s.name == "recosphere_model_reloads_total":
+                rel[L["result"]] = rel.get(L["result"], 0) + s.value
+            elif s.name == "recosphere_request_seconds_bucket":
+                d = lat.setdefault(L["arm"], {})
+                d[float(L["le"])] = d.get(float(L["le"]), 0) + s.value
+
+    def q(buckets, p):
+        items = sorted(buckets.items())
+        total = items[-1][1] if items else 0
+        if not total:
+            return None
+        for le, c in items:
+            if c >= p * total:
+                return None if le == float("inf") else le * 1e3
+        return None
+
+    arms = sorted({a for a, _ in req} | {a for a, _ in fb})
+    out = {}
+    for a in arms:
+        n = sum(v for (x, _), v in req.items() if x == a)
+        clicks = fb.get((a, "click"), 0)
+        plays = fb.get((a, "play"), 0)
+        out[a] = {"requests": int(n), "personalized": int(req.get((a, "personalized"), 0)),
+                  "fallback": int(req.get((a, "fallback"), 0)), "clicks": int(clicks), "plays": int(plays),
+                  "ctr": clicks / n if n else None, "play_rate": plays / n if n else None,
+                  "p50_ms_le": q(lat.get(a, {}), 0.5), "p95_ms_le": q(lat.get(a, {}), 0.95)}
+    return {"arms": out, "errors": {k: int(v) for k, v in err.items()}, "reloads": {k: int(v) for k, v in rel.items()}}
