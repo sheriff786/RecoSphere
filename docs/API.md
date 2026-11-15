@@ -20,7 +20,7 @@ browser ──► web app (Next.js, :3000)  /api/*  ── server-side fetch ─
   figures ...) or `other` (gift cards, memberships, guides, non-gaming). Lists take an optional `item_type`
   filter applied AFTER ranking; without it the output is exactly the trained pipeline's. Types come from
   `data/gold/<cat>/item_types.parquet` (`python -m data.item_types --write`), else they are classified from the
-  gold text at startup. Real catalog: 12,447 games, 13,044 accessories, 121 other.
+  gold text at startup. Real catalog: 12,422 games, 13,045 accessories, 145 other.
 
 ## 1. Engine API (`serve/`, FastAPI)
 
@@ -39,6 +39,7 @@ browser ──► web app (Next.js, :3000)  /api/*  ── server-side fetch ─
 | GET | `/catalog/similar/{item_id}` | nearest games in embedding space | `routers/catalog.py` |
 | GET | `/users/demo` | real dataset players to explore as | `routers/catalog.py` |
 | GET | `/users/{user_id}/history` | a user's recent games | `routers/catalog.py` |
+| GET | `/users/{user_id}/fresh` | items new to the catalog, by the user's taste | `routers/catalog.py` |
 | GET | `/health` | model, store, experiment and reload status | `routers/admin.py` |
 | GET | `/metrics` | Prometheus metrics | `routers/admin.py` |
 | POST | `/admin/reload` | reload production model + experiment config now | `routers/admin.py` |
@@ -199,6 +200,18 @@ last *game* played, skipping accessories bought since).
 **How it works:** `Product.history` reads the feature store, i.e. exactly the history the user tower sees.
 Unknown user → empty list. Response: `{"user_id", "items": [card, ...]}`.
 
+### GET `/users/{user_id}/fresh`
+"Fresh on RecoSphere": items new to the catalog (`is_new`: no interaction before the cutoff; this is NOT a
+release date, a 2016 game can be new here), without the ones the user has already played.
+Query: `k` (20, 1-100), `item_type` (optional filter; the app sends `game`).
+
+**How it works** (`Product.fresh`): with history, sorted by taste = user-tower vector · item vector (the
+model's `tt_score`, ties by item id). The two-tower model is only run, not changed, and the ranker is not used:
+its strongest features are popularity windows, all 0 for new items. Without history: newest first by
+first-available date (unknown dates last), because popularity cannot order items nobody has played.
+Real catalog: 343 new games, 2,406 new accessories, 11 new other.
+Response: `{"user_id", "ranked_by": "taste" | "newest", "items": [card (+ "score" when by taste), ...]}`.
+
 ### GET `/health`
 Liveness + what is being served. Used by the Docker healthcheck, the e2e global setup and the admin page.
 
@@ -257,7 +270,7 @@ Postgres in P1).
 | POST | `/api/admin/rollback` | admin "Roll back" button | `POST /admin/rollback` |
 
 The pages themselves (home, game, search, library, onboarding) call the engine while rendering on the server:
-`/recommend?meta=true`, `/explain`, `/users/{id}/history`, `/catalog/*`.
+`/recommend?meta=true`, `/explain`, `/users/{id}/history`, `/users/{id}/fresh`, `/catalog/*`.
 
 ### POST `/api/auth/signup`
 Body `{"email", "password", "name"?}`. Email must look valid, password 8+ characters. Creates an `app`
@@ -307,5 +320,6 @@ Admins only (email listed in `ADMIN_EMAILS`), else `403 {"error": "forbidden"}`.
 | Date | Change |
 |---|---|
 | 2026-11-15 | First version: 15 engine endpoints, 9 web API routes. |
+| 2026-11-15 | P0.5 item 3: new `GET /users/{user_id}/fresh` ("Fresh on RecoSphere" row). |
 | 2026-11-15 | P0.5 item 2: `/explain` gets `item_type`, `in_top10`, reason `share` + `strength`; web `/api/admin/explain`. |
 | 2026-11-15 | P0.5 item 1: `item_type` filter on `/recommend`, `/catalog/popular`, `/catalog/search`, `/catalog/similar`, `/users/{id}/history`; `item_type` in cards and `/health`. |

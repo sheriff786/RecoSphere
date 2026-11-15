@@ -58,6 +58,9 @@ export const engine = {
     get<{ items: Game[] }>(`/catalog/similar/${enc(item)}?k=${k}&item_type=${type}${user ? `&user_id=${enc(user)}` : ""}`).then((r) => r.items),
   history: (user: string, k = 20, type: ItemType = "game") =>
     get<{ items: Game[] }>(`/users/${enc(user)}/history?k=${k}&item_type=${type}`).then((r) => r.items),
+  // new to the catalog (not a release date): by the user's taste when there is history, else newest first
+  fresh: (user: string, k = 20, type: ItemType = "game") =>
+    get<{ ranked_by: "taste" | "newest"; items: Game[] }>(`/users/${enc(user)}/fresh?k=${k}&item_type=${type}`),
   demoUsers: (k = 9) =>
     get<{ users: { user_id: string; n_games: number; recent: string[] }[] }>(`/users/demo?k=${k}`).then((r) => r.users),
   event: (user: string, item: string) => post(`/event`, { user_id: user, item_id: item }),

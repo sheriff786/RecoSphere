@@ -82,6 +82,8 @@ test("new user: signup -> onboarding -> personalized feed -> play changes it -> 
   expect(before.length).toBeGreaterThanOrEqual(5);
   const homeTitles = await page.getByTestId("card-title").evaluateAll((els) => els.map((e) => e.getAttribute("title") ?? ""));
   expect(homeTitles.filter((t) => ACCESSORY_WORDS.test(t)), "home rows show games only").toEqual([]);
+  await expect(page.getByRole("heading", { name: "Fresh on RecoSphere" })).toBeVisible();   // new to the catalog
+  await expect(page.getByRole("heading", { name: "New releases" })).toHaveCount(0);
 
   // an ordinary user is not an admin
   expect((await page.request.get("/api/admin/summary")).status()).toBe(403);

@@ -33,6 +33,12 @@ def catalog_similar(item_id: str, k: int = Query(12, ge=1, le=50), user_id: str 
     return {"item_id": item_id, "items": p.similar(item_id, k, exclude=seen, item_type=item_type)}
 
 
+@router.get("/users/{user_id}/fresh")
+def user_fresh(user_id: str, k: int = Query(20, ge=1, le=100), item_type: ItemType | None = None):
+    ranked_by, items = product().fresh(user_id, k, item_type)
+    return {"user_id": user_id, "ranked_by": ranked_by, "items": items}
+
+
 @router.get("/users/demo")
 def users_demo(k: int = Query(12, ge=1, le=50)):
     return {"users": product().demo_users(k)}

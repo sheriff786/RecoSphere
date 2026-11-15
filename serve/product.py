@@ -22,7 +22,8 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from ranking.pipeline import FEATS, new_item_slots
+from ranking.pipeline import FEATS, new_item_slots, tie_safe_top
+from retrieval.two_tower import PAD, embed_users
 
 # feature -> (reason group, plain-language text). User-only features are the same for every candidate of a
 # user, so they never explain why THIS item ranks above another -> excluded from reasons.
@@ -99,6 +100,28 @@ class Product:
         if new_only:
             order = order[self.rec.items.is_new[order]]
         return [self._meta(int(i)) for i in order[offset: offset + k]]
+
+    # ------------------------------------------------------------------ fresh
+    def fresh(self, user_id: str | None, k=20, item_type=None):
+        """Items new to the catalog (no interaction before the cutoff: is_new), the user's seen items removed.
+        With history: by taste = user-tower vector . item vector (the model's tt_score; read-only, no ranker:
+        its strongest features are popularity windows, all 0 for new items). Without history: newest first
+        (first-available date), because popularity cannot order items nobody has played yet."""
+        new = self.rec.keep(np.flatnonzero(self.rec.items.is_new), item_type)
+        r = self.rec.store.get(user_id)[1] if user_id else None
+        if r is not None and r["n_hist"] > 0:
+            new = new[~np.isin(new, r["seen"])]
+            H = np.full((1, self.rec.hist_len), PAD, dtype=np.int64)
+            h = r["hist"][-self.rec.hist_len:]
+            H[0, self.rec.hist_len - len(h):] = h
+            u = embed_users(self.rec.model, H)[0]
+            taste = (self.rec.V[new] @ u).astype(np.float32)
+            top = tie_safe_top(new, taste, k)
+            score = dict(zip(new.tolist(), taste.tolist()))
+            return "taste", [{**self._meta(int(i)), "score": round(float(score[int(i)]), 5)} for i in top]
+        dfa = self.rec.dfa_ts[new].astype(np.float64)
+        top = new[np.lexsort((new, -np.where(dfa > 0, dfa, -np.inf)))][:k]     # unknown date last, ties by id
+        return "newest", [self._meta(int(i)) for i in top]
 
     # ------------------------------------------------------------------ search
     def search(self, q: str, k=24, item_type=None):

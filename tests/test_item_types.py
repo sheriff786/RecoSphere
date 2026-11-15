@@ -28,6 +28,10 @@ ACC = ["Video Games", "Nintendo Switch", "Accessories", "Controllers"]
     ("Wonder", G, "Books", "other"),                                                               # Amazon files books under Games
     ("Star Wars Armada Invisible Hand EXPANSION PACK | Miniatures Battle Game", [], None, "other"),
     ("Pikachu Hard Pouch", [], None, "accessory"),                                                 # weak word, no path
+    ("Halo Infinite: 500 Halo Credits – Xbox & Windows [Digital Code]", G, "Video Games", "other"),  # in-game currency
+    ("Call of Duty 2,400 COD Points - PS4", [], None, "other"),
+    ("ChezMax 33-Pcs BOTW NFC Cards Compatible for Tale of Zelda", [], None, "accessory"),
+    ("Credits Roll - PC", [], None, "game"),                                                       # 'credits' needs a number
 ])
 def test_classify(title, path, main, expected):
     assert classify(title, path, main)[0] == expected, classify(title, path, main)

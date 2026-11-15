@@ -14,7 +14,7 @@ export default async function Home() {
   const uid = user.engine_user_id;
   const t0 = Date.now();
   const [recs, history, trending, fresh] = await Promise.all([
-    engine.recommend(uid, 20), engine.history(uid, 12), engine.popular(20), engine.popular(20, 0, true),
+    engine.recommend(uid, 20), engine.history(uid, 12), engine.popular(20), engine.fresh(uid, 20),
   ]);
   const last = history[0];
   const [why, because] = await Promise.all([
@@ -63,7 +63,8 @@ export default async function Home() {
            badge={personalized ? "personalized" : undefined} subtitle="ranked by the LightGBM ranker over two-tower + trending candidates" />
       {last && <Row title={`Because you played ${last.title}`} games={because.filter((g) => !seen.has(g.item_id))}
                     subtitle="nearest games in the two-tower embedding space" />}
-      <Row title="New releases" games={fresh.filter((g) => !seen.has(g.item_id))} subtitle="no history yet: the text tower is how the engine knows them" />
+      <Row title="Fresh on RecoSphere" games={fresh.items}
+           subtitle={`new to the catalog (not by release date) · ${fresh.ranked_by === "taste" ? "sorted by your taste (two-tower)" : "newest first"}`} />
       <Row title="Trending now" games={trending.filter((g) => !seen.has(g.item_id))} />
       {history.length > 0 && <Row title="Continue playing" games={history} />}
 

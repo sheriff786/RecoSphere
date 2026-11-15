@@ -60,6 +60,12 @@ assert set(exg) == set(feed) and all(v["in_top10"] for v in exg.values()), (sort
 assert all(r["strength"] in ("strong", "medium", "weak") and 0 <= r["share"] <= 1 for v in exg.values() for r in v["reasons"])
 played = pop[0]["item_id"]
 assert g(f"/explain/app:ci?items={played}&item_type=game")["items"][played]["in_top10"] is False
+# P0.5 item 3: Fresh on RecoSphere = new games only, by taste for a user with history, newest first otherwise
+fr = g("/users/app:ci/fresh?k=10&item_type=game")
+assert fr["ranked_by"] == "taste" and fr["items"], fr
+assert all(x["is_new"] and x["item_type"] == "game" for x in fr["items"])
+sc = [x["score"] for x in fr["items"]]; assert sc == sorted(sc, reverse=True), sc
+assert g("/users/nobody-ci/fresh?k=5&item_type=game")["ranked_by"] == "newest"
 assert g("/admin/summary")["health"]["model_run"] == "ci"
 print("product API ok")
 PY

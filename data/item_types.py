@@ -43,7 +43,8 @@ def _words(*ws: str) -> re.Pattern:
 NOT_A_VIDEO_GAME = _words(
     r"strategy guides?", r"game guides?", r"official guide", r"guide ?book", r"game pass", r"memberships?",
     r"subscriptions?", r"gift cards?", r"points cards?", r"prepaid cards?", r"wallet top-?up", r"novel",
-    r"quicken", r"turbotax")
+    r"quicken", r"turbotax", r"v-?bucks", r"in-game currency",
+    r"\d[\d,]*\s+(?:[\w'-]+\s+){0,2}(?:credits|coins|points|gems|crystals)")
 TABLETOP = _words(r"board ?games?", r"card games?", r"tabletop", r"miniatures", r"jigsaw")
 CONSOLE_BUNDLE = re.compile(
     r"^(sony\s+)?(playstation ?\d( pro| slim)?|ps\d( pro| slim)?|xbox (one|360|series [xs])( [sx])?|nintendo switch"
@@ -60,7 +61,8 @@ STRONG_ACCESSORY = _words(
     r"mugs?", r"keychains?", r"lanyards?", r"wrist ?straps?", r"screwdrivers?", r"tool ?kit", r"replacement",
     r"repair", r"cleaning kit", r"vr headset", r"consoles?", r"system bundle", r"silicone cover", r"analog caps?",
     r"charging stand", r"wall mount", r"head strap", r"accessor(?:y|ies)", r"video game system", r"game system",
-    r"illuminator", r"golf club", r"handles?", r"oculus touch", r"playstand", r"cushion", r"\d+ ?(?:gb|tb)")
+    r"illuminator", r"golf club", r"handles?", r"oculus touch", r"playstand", r"cushion", r"\d+ ?(?:gb|tb)",
+    r"nfc(?: cards?| tags?)?")
 FIGURE_FRANCHISE = _words(r"skylanders", r"disney infinity", r"lego dimensions", r"power discs?", r"starlink")
 WEAK_ACCESSORY = _words(
     r"cases?", r"sleeves?", r"pouch(?:es)?", r"bags?", r"backpacks?", r"stands?", r"mounts?", r"holders?",
