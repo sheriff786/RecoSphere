@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from serve import deps
 from serve import metrics as M
-from serve.deps import STATE, product
+from serve.deps import STATE, ItemType, product
 from serve.experiments import ExposureLogger
 
 log = logging.getLogger("recosphere")
@@ -15,7 +15,7 @@ router = APIRouter()
 
 @router.get("/recommend/{user_id}")
 def recommend(user_id: str, k: int = Query(10, ge=1, le=50), rerank: bool = True, debug: bool = False,
-              force_arm: str | None = None, meta: bool = False):
+              force_arm: str | None = None, meta: bool = False, item_type: ItemType | None = None):
     mgr = STATE["mgr"]
     t0 = time.perf_counter()
     try:
@@ -23,13 +23,14 @@ def recommend(user_id: str, k: int = Query(10, ge=1, le=50), rerank: bool = True
     except KeyError:
         raise HTTPException(status_code=400, detail=f"unknown arm {force_arm}")
     try:                                                       # `rec` = one object for the whole request
-        out = rec.recommend(user_id, k=k, rerank=rerank)
+        out = rec.recommend(user_id, k=k, rerank=rerank, item_type=item_type)
     except Exception:                                          # never fail the page: log + popular fallback
         log.exception("recommend failed for %s", user_id)
         M.ERRORS.labels("recommend").inc()
         out = {"user_id": user_id, "source": "fallback_error",
                "items": [{"item_id": rec.item_ids[i], "title": rec.titles[i], "is_new": bool(rec.items.is_new[i]),
-                          "score": None} for i in rec.fallback[:k]], "timings_ms": {}}
+                          "item_type": str(rec.item_type[i]), "score": None}
+                         for i in rec.keep(rec.fallback, item_type)[:k]], "timings_ms": {}}
     secs = time.perf_counter() - t0
     M.observe_recommend(out, arm, rec.model_run, secs)
     rid = ExposureLogger.new_request_id()

@@ -13,6 +13,9 @@ shows exactly what the engine would serve:
               plus the most similar game in the user's history ("because you played ...")
   history     the user's recent items from the feature store (what the user tower actually sees)
   demo users  real dataset users with long histories, for "explore as a real player"
+
+Every list takes an optional item_type (game | accessory | other, data/item_types.py) so the app can show
+games only in game surfaces and accessories in "Gear for you".
 """
 import re
 from datetime import datetime, timezone
@@ -73,7 +76,7 @@ class Product:
         year = datetime.fromtimestamp(int(dfa), tz=timezone.utc).year if dfa and dfa > 0 else None
         return {"item_id": self.rec.item_ids[i], "title": self.rec.titles[i], "platforms": platforms,
                 "categories": crumbs[:3], "year": year, "description": desc[:600],
-                "is_new": bool(self.rec.items.is_new[i]), "plays_90d": int(self.rec.items.pop_90d[i]),
+                "is_new": bool(self.rec.items.is_new[i]), "item_type": str(self.rec.item_type[i]), "plays_90d": int(self.rec.items.pop_90d[i]),
                 "trending_rank": int(self.rank_of_recent[i]) + 1}
 
     def items(self, item_ids):
@@ -84,20 +87,22 @@ class Product:
                 out.append(self._meta(i))
         return out
 
-    def popular(self, k=24, offset=0, new_only=False):
-        order = self.rec.items.recent_pop_order
+    def popular(self, k=24, offset=0, new_only=False, item_type=None):
+        order = self.rec.keep(self.rec.items.recent_pop_order, item_type)
         if new_only:
             order = order[self.rec.items.is_new[order]]
         return [self._meta(int(i)) for i in order[offset: offset + k]]
 
     # ------------------------------------------------------------------ search
-    def search(self, q: str, k=24):
+    def search(self, q: str, k=24, item_type=None):
         toks = re.findall(r"[a-z0-9]+", q.lower())
         if not toks:
             return []
         scored = []
         ql = q.lower().strip()
         for i, tt in enumerate(self.title_tokens):
+            if item_type is not None and self.rec.item_type[i] != item_type:
+                continue
             hit = sum(1 for t in toks if t in tt or any(w.startswith(t) for w in tt))
             if hit:
                 exact = 1 if ql in (self.rec.titles[i] or "").lower() else 0
@@ -106,23 +111,29 @@ class Product:
         return [self._meta(i) for _, _, i in scored[:k]]
 
     # ------------------------------------------------------------------ similar
-    def similar(self, item_id: str, k=12, exclude=()):
+    def similar(self, item_id: str, k=12, exclude=(), item_type=None):
         i = self.rec.iid_of[item_id]
         sims = self.Vn @ self.Vn[i]
         sims[i] = -np.inf
+        if item_type is not None:
+            sims[self.rec.item_type != item_type] = -np.inf
         if exclude:
             ex = [self.rec.iid_of[x] for x in exclude if x in self.rec.iid_of]
             sims[ex] = -np.inf
-        top = np.argpartition(-sims, k)[:k]
+        k = min(k, int(np.isfinite(sims).sum()))
+        if k <= 0:
+            return []
+        top = np.argpartition(-sims, k - 1)[:k]
         top = top[np.argsort(-sims[top])]
         return [{**self._meta(int(j)), "similarity": round(float(sims[j]), 3)} for j in top]
 
     # ------------------------------------------------------------------ user
-    def history(self, user_id: str, k=20):
+    def history(self, user_id: str, k=20, item_type=None):
         _, r = self.rec.store.get(user_id)
         if r is None:
             return []
-        return [self._meta(int(i)) for i in reversed(r["hist"][-k:])]
+        newest_first = self.rec.keep(np.array(r["hist"][::-1], dtype=np.int64), item_type)
+        return [self._meta(int(i)) for i in newest_first[:k]]
 
     def demo_users(self, k=12, min_hist=8):
         h = self.rec.hist

@@ -46,6 +46,13 @@ for it in pop[:3]:   # brand-new app user: 3 plays -> personalized feed
     urllib.request.urlopen(urllib.request.Request(B + "/event", data=json.dumps({"user_id": "app:ci", "item_id": it["item_id"]}).encode(),
                                                   headers={"content-type": "application/json"}))
 assert g("/recommend/app:ci?k=5&meta=true")["source"] == "personalized"
+# P0.5 item types: synthetic catalog has controllers; the game filter must drop every one of them
+assert g("/health")["item_types"]["accessory"] > 0
+assert all(x["item_type"] == "game" for x in g("/recommend/app:ci?k=20&item_type=game")["items"])
+acc = g("/catalog/popular?k=20&item_type=accessory")["items"]
+assert acc and all(x["item_type"] == "accessory" and "Controller" in x["title"] for x in acc), acc[:2]
+assert g("/catalog/search?q=controller&item_type=game")["items"] == []
+assert all(x["item_type"] == "game" for x in g(f"/catalog/similar/{pop[0]['item_id']}?k=10&item_type=game")["items"])
 assert g("/admin/summary")["health"]["model_run"] == "ci"
 print("product API ok")
 PY

@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { engine } from "@/lib/engine";
 import Player from "@/components/Player";
@@ -13,5 +13,6 @@ export default async function PlayPage({ params, searchParams }: {
   const { rid } = await searchParams;
   const [g] = await engine.items([decodeURIComponent(id)]);
   if (!g) notFound();
+  if (g.item_type !== "game") redirect(`/game/${encodeURIComponent(g.item_id)}`);   // only games stream
   return <Player game={g} rid={rid} />;
 }

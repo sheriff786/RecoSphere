@@ -16,6 +16,11 @@ browser ──► web app (Next.js, :3000)  /api/*  ── server-side fetch ─
 - **Engine clock:** frozen at the start of the test window (`t_ref` in `/health`, July 2021 on the real data).
   Events without `ts` are stamped with it. Real time comes in P4.
 - **Live, interactive docs:** `http://127.0.0.1:8000/docs` (Swagger UI), `/redoc`, `/openapi.json`.
+- **Item types** (`data/item_types.py`): every item is `game`, `accessory` (controllers, cases, consoles,
+  figures ...) or `other` (gift cards, memberships, guides, non-gaming). Lists take an optional `item_type`
+  filter applied AFTER ranking; without it the output is exactly the trained pipeline's. Types come from
+  `data/gold/<cat>/item_types.parquet` (`python -m data.item_types --write`), else they are classified from the
+  gold text at startup. Real catalog: 12,447 games, 13,044 accessories, 121 other.
 
 ## 1. Engine API (`serve/`, FastAPI)
 
@@ -55,7 +60,8 @@ The main endpoint: the top-k games for a user.
 | `rerank` | true | apply the new-item slots re-rank (see below) |
 | `debug` | false | include `timings_ms` per stage |
 | `force_arm` | – | serve a specific A/B arm (QA only; logged with `forced=true`, excluded from analysis); unknown arm → `400` |
-| `meta` | false | return full game cards (as `/catalog/items`) instead of id/title/is_new |
+| `meta` | false | return full game cards (as `/catalog/items`) instead of id/title/is_new/item_type |
+| `item_type` | – | `game`, `accessory` or `other`: keep only that type (see *Item types* above); invalid value → `422` |
 
 **How it works** (`serve/recommender.py: Recommender.recommend`):
 1. **A/B routing** (`serve/experiments.py: ExperimentManager.route`): salted sha256 of the user id picks the
@@ -66,8 +72,10 @@ The main endpoint: the top-k games for a user.
    `n_tt` + recent-popularity top `n_pop`, seen items removed.
 5. **Features + ranking**: `ranking/pipeline.py: assemble` builds the 22 features (the same code as training:
    parity), LightGBM LambdaRank scores them, ties broken by item id.
-6. **Re-rank**: `new_item_slots` makes sure up to `NEW_ITEM_SLOTS` (default 2) new games are in the top-k,
-   taken from the ranker's top 100. If none of those 100 is new, fewer appear.
+6. **Type filter + re-rank**: with `item_type`, other types are dropped from the ranked list (order kept);
+   then `new_item_slots` makes sure up to `NEW_ITEM_SLOTS` (default 2) new items are in the top-k, taken from
+   the top 100 of that list. If none of those 100 is new, fewer appear. A user without history gets the
+   fallback list, filtered the same way.
 7. **Logging**: Prometheus counters/histograms (`serve/metrics.py`); with `EXPOSURE_DIR` set, one JSON line
    per request in `exposures-<pid>.jsonl` (request id, arm, items, latency). `ab/analyze.py` joins these with clicks.
 8. **Never fails the page**: an exception logs, counts `recosphere_errors_total{kind="recommend"}` and returns
@@ -79,8 +87,8 @@ Response (real model; `k=2&debug=true`, titles shortened):
   "user_id": "AEPQB547GDARJWCYCDJO4X2WH5CQ",
   "source": "personalized",
   "items": [
-    {"item_id": "B097PBVHYP", "title": "Xbox PC Wireless Controller – Space Jam: ...", "is_new": true, "score": 0.31845},
-    {"item_id": "B0BPMJ8TRV", "title": "PowerA Spectra Infinity Enhanced Wired Controller ...", "is_new": true, "score": 0.17372}
+    {"item_id": "B097PBVHYP", "title": "Xbox PC Wireless Controller – Space Jam: ...", "is_new": true, "item_type": "accessory", "score": 0.31845},
+    {"item_id": "B0BPMJ8TRV", "title": "PowerA Spectra Infinity Enhanced Wired Controller ...", "is_new": true, "item_type": "accessory", "score": 0.17372}
   ],
   "timings_ms": {"store_get": 0.0, "user_tower": 0.0, "ann_candidates": 0.0, "features": 0.0, "ranker": 0.0, "rerank": 0.0, "total": 0.0},
   "request_id": "c58cf3a86cce4a22bad3688d10dd6c11",
@@ -89,7 +97,8 @@ Response (real model; `k=2&debug=true`, titles shortened):
   "model_run": "20261111-171751"
 }
 ```
-(`timings_ms` values are placeholders here; they are real per request.) `source` is `personalized`,
+(`timings_ms` values are placeholders here; they are real per request. Both items are controllers: this is
+the unfiltered output for a real user, the reason the app always asks for `item_type=game`.) `source` is `personalized`,
 `fallback` or `fallback_error`. `experiment` is `null` and `arm` is `control` when no experiment is active.
 
 ### GET `/explain/{user_id}`
@@ -140,10 +149,10 @@ written to `clicks-<pid>.jsonl`. Response: `{"ok": true}`.
 Game cards by id. Query: `ids` (required, comma-separated). Unknown ids are skipped.
 
 **How it works:** `Product.items` → `_meta`: title, `platforms` and `categories` parsed from the item text,
-release `year`, `description` (max 600 chars), `is_new`, `plays_90d`, `trending_rank`.
+release `year`, `description` (max 600 chars), `is_new`, `item_type`, `plays_90d`, `trending_rank`.
 
 Response: `{"items": [card, ...]}`. Card fields: `item_id, title, platforms, categories, year, description,
-is_new, plays_90d, trending_rank`.
+is_new, item_type, plays_90d, trending_rank`.
 
 ### GET `/catalog/popular`
 Trending games by recent popularity (as of the engine clock).
@@ -152,19 +161,21 @@ Trending games by recent popularity (as of the engine clock).
 |---|---|---|
 | `k` | 24 | 1-100 |
 | `offset` | 0 | paging |
-| `new_only` | false | only games marked new (no interactions before the cutoff) |
+| `new_only` | false | only items marked new (no interactions before the cutoff) |
+| `item_type` | – | `game`, `accessory` or `other`: keep only that type (see *Item types* above); invalid value → `422` |
 
 **How it works:** `Product.popular` walks `items.recent_pop_order`. Response: `{"items": [card, ...]}`.
 
 ### GET `/catalog/search`
-Title search. Query: `q` (required), `k` (24, 1-100).
+Title search. Query: `q` (required), `k` (24, 1-100), `item_type` (optional filter, see *Item types*).
 
 **How it works:** `Product.search`: tokens of `q` match title tokens exactly or as a prefix; more matching
 tokens first, an exact substring match gets a bonus, ties broken by recent popularity.
 Response: `{"query": q, "items": [card, ...]}`.
 
 ### GET `/catalog/similar/{item_id}`
-Games closest to one game. Query: `k` (12, 1-50), `user_id` (optional: exclude this user's history).
+Games closest to one game. Query: `k` (12, 1-50), `user_id` (optional: exclude this user's history),
+`item_type` (optional filter, see *Item types*).
 
 **How it works:** `Product.similar`: cosine similarity of the two-tower item embeddings (the vectors FAISS
 serves). Unknown item → `404`. Response: `{"item_id", "items": [card + "similarity", ...]}`.
@@ -177,7 +188,8 @@ shuffle (seed 7), so `k=9` is always a subset of `k=50` (the web app relies on t
 Response: `{"users": [{"user_id", "n_games", "recent": [3 titles]}]}`.
 
 ### GET `/users/{user_id}/history`
-A user's most recent games, newest first. Query: `k` (20, 1-200).
+A user's most recent items, newest first. Query: `k` (20, 1-200), `item_type` (optional filter: e.g. the
+last *game* played, skipping accessories bought since).
 
 **How it works:** `Product.history` reads the feature store, i.e. exactly the history the user tower sees.
 Unknown user → empty list. Response: `{"user_id", "items": [card, ...]}`.
@@ -187,7 +199,7 @@ Liveness + what is being served. Used by the Docker healthcheck, the e2e global 
 
 Response fields: `status, category, store (redis|memory), users, items, t_ref, model_run, model_dir,
 model_loaded_at, emb_version, index, index_knob, retrieval_variant, ranker_iterations, cold_user_fallback,
-new_item_slots` (from `Recommender.info`) and `reloads, last_reload_error, watch_seconds, experiment,
+new_item_slots, item_types` (counts per type), `item_types_source` (from `Recommender.info`) and `reloads, last_reload_error, watch_seconds, experiment,
 experiment_error, experiment_warning` (from `ModelManager.info` / `ExperimentManager.info`).
 
 ### GET `/metrics`
@@ -283,3 +295,4 @@ Admins only (email listed in `ADMIN_EMAILS`), else `403 {"error": "forbidden"}`.
 | Date | Change |
 |---|---|
 | 2026-11-15 | First version: 15 engine endpoints, 9 web API routes. |
+| 2026-11-15 | P0.5 item 1: `item_type` filter on `/recommend`, `/catalog/popular`, `/catalog/search`, `/catalog/similar`, `/users/{id}/history`; `item_type` in cards and `/health`. |

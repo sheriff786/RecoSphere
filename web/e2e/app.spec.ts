@@ -7,6 +7,9 @@ const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? "admin12345";
 // Roll back rewrites production.json. Never on a real stack unless asked: CI's synthetic run sets it.
 const ALLOW_ROLLBACK = process.env.E2E_ALLOW_ROLLBACK === "1";
 const PASSWORD = "e2e-password-123";
+const ENGINE = process.env.E2E_ENGINE_URL ?? "http://127.0.0.1:8000";
+// A game title never contains these words: data/item_types.py classifies such items as accessories.
+const ACCESSORY_WORDS = /(controllers?|gamepads?|headsets?|chargers?)/i;
 
 test.describe.configure({ mode: "serial" });
 
@@ -32,6 +35,10 @@ async function login(page: Page, email: string, password: string) {
 
 const row = (page: Page, title: string | RegExp) =>
   page.getByTestId("row").filter({ has: page.getByRole("heading", { name: title }) });
+
+// titles drawn on generated covers (svg aria-label) inside a locator
+const coverTitles = (l: Locator) =>
+  l.locator("svg[role=img]").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") ?? ""));
 
 // item ids of the cards in a row, in order (from the card links: /game/<id>?rid=...)
 async function cardIds(r: Locator): Promise<string[]> {
@@ -59,6 +66,8 @@ test("new user: signup -> onboarding -> personalized feed -> play changes it -> 
   const picks = page.getByTestId("onboard-game");
   const done = page.getByTestId("onboard-done");
   await expect(picks.first()).toBeVisible();
+  expect((await coverTitles(page.getByTestId("onboard-game"))).filter((t) => ACCESSORY_WORDS.test(t)),
+         "onboarding offers games only").toEqual([]);
   await expect(done).toBeDisabled();
   for (let i = 0; i < 3; i++) await picks.nth(i).click();
   await expect(done).toBeEnabled();
@@ -71,6 +80,8 @@ test("new user: signup -> onboarding -> personalized feed -> play changes it -> 
   const top = row(page, "Top picks for you");
   const before = await cardIds(top);
   expect(before.length).toBeGreaterThanOrEqual(5);
+  const homeTitles = await page.getByTestId("card-title").evaluateAll((els) => els.map((e) => e.getAttribute("title") ?? ""));
+  expect(homeTitles.filter((t) => ACCESSORY_WORDS.test(t)), "home rows show games only").toEqual([]);
 
   // an ordinary user is not an admin
   expect((await page.request.get("/api/admin/summary")).status()).toBe(403);
@@ -101,6 +112,27 @@ test("new user: signup -> onboarding -> personalized feed -> play changes it -> 
   await atPath(page, "/login");
   await login(page, email, PASSWORD);
   await expect(page.getByTestId("engine-strip")).toContainText("source personalized");
+});
+
+test("accessories are never offered as games: search, game page, play", async ({ page, request }) => {
+  await page.goto("/signup");
+  await page.getByPlaceholder("Email").fill(`e2e-gear-${Date.now()}@example.test`);
+  await page.getByPlaceholder(/^Password/).fill(PASSWORD);
+  await page.getByRole("button", { name: "Create account" }).click();
+  await atPath(page, "/onboarding");
+
+  await page.goto("/search?q=controller");
+  await expect(page.getByText("No games found.")).toBeVisible();
+
+  const gear = (await (await request.get(`${ENGINE}/catalog/popular?k=1&item_type=accessory`)).json()).items[0];
+  expect(gear?.item_type, "the catalog has at least one accessory").toBe("accessory");
+  const id = encodeURIComponent(gear.item_id);
+  await page.goto(`/game/${id}`);
+  await expect(page.getByTestId("not-playable")).toBeVisible();
+  await expect(page.getByTestId("play-button")).toHaveCount(0);
+  await page.goto(`/play/${id}`);
+  await page.waitForURL((u) => u.pathname === `/game/${id}` || u.pathname === `/game/${gear.item_id}`);
+  expect((await page.request.post("/api/play", { data: { item_id: gear.item_id } })).status()).toBe(400);
 });
 
 test("admin: engine dashboard shows the live model and the A/B table", async ({ page }) => {

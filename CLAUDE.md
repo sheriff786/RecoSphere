@@ -48,6 +48,7 @@ python -m pipeline.run                                # train -> gate -> promote
 python -m pipeline.run --rollback
 uvicorn serve.app:app --host 127.0.0.1 --port 8000    # engine; use 127.0.0.1, not localhost (IPv6 delay on Windows)
 python -m serve.parity_check --n 300
+python -m data.item_types --write                     # game/accessory/other per item -> gold/item_types.parquet (re-run after new data)
 cd web; npm run dev                                   # app on :3000 (needs .env.local from .env.example)
 bash scripts/ci_smoke.sh                              # whole system on synthetic data (WSL / Git Bash)
 make up / up-all / down / config / help               # Docker stack (Git Bash); config: .env from .env.example
@@ -66,6 +67,9 @@ make e2e            # Playwright vs the running stack (no rollback)   make e2e-s
 - **Hot swap:** load in the background, smoke test, swap one reference; the feature store is not reloaded.
 - **A/B:** assignment = salted sha256 by user; never decide when MDE > 10%; guardrails include coverage
   and new-item share; keep-alive HTTP in simulators (Windows port exhaustion).
+- **Item types are a serving filter, not a feature:** the model still ranks accessories (it learned Amazon
+  purchases); the app asks for `item_type=game` everywhere (`web/lib/engine.ts` defaults). Never add item_type
+  to the ranker without retraining + the gate. Rules + audit: `data/item_types.py`.
 - **API doc:** any change that adds, changes or removes an engine route or a web `/api/*` route updates
   `docs/API.md` (table row + section + change log) in the same commit. `tests/test_api_doc.py` enforces it.
 - **Web:** the browser never calls the engine directly; logout navigates client-side (a server redirect

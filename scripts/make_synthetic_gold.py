@@ -58,8 +58,13 @@ def main():
     pl.DataFrame({"uid": np.arange(len(users), dtype=np.int32), "user_id": [f"U{x}" for x in users]}).write_parquet(g / "user_map.parquet")
     pl.DataFrame({"iid": np.arange(len(items), dtype=np.int32), "item_id": [f"P{x}" for x in items]}).write_parquet(g / "item_map.parquet")
 
-    titles = [f"{WORDS[item_c[i] % 5][0].title()} {WORDS[item_c[i] % 5][1].title()} genre{item_c[i]} edition {i}" for i in items]
-    texts = [f"{t} | {WORDS[item_c[i] % 5][2]} mode multiplayer" for t, i in zip(titles, items)]
+    # Like the real catalog, games and gear are mixed (P0.5): every 7th item is a controller with an Accessories
+    # category path, so CI exercises the item_type filter (data/item_types.py). Interactions are unchanged.
+    acc = {int(i) for i in items if i % 7 == 0}
+    titles = [f"Pro Controller {WORDS[item_c[i] % 5][1].title()} model {i}" if i in acc else
+              f"{WORDS[item_c[i] % 5][0].title()} {WORDS[item_c[i] % 5][1].title()} genre{item_c[i]} edition {i}" for i in items]
+    texts = [f"{t} | Video Games > PC > Accessories > Controllers | wireless gamepad" if i in acc else
+             f"{t} | Video Games > PC > Games | {WORDS[item_c[i] % 5][2]} mode multiplayer" for t, i in zip(titles, items)]
     feat = pl.DataFrame({"iid": np.arange(len(items), dtype=np.int32), "item_id": [f"P{x}" for x in items],
                          "title": titles, "text": texts,
                          "store_id": rng.integers(0, 6, len(items)), "type_id": rng.integers(0, 4, len(items)),

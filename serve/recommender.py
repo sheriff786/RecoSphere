@@ -9,6 +9,8 @@ recommend(user_id):
   5. features       -> ranking/pipeline.assemble()  (SAME code as training -> no skew)
   6. LightGBM       -> scores, sort
   7. re-rank        -> new-item slots (notebook 06 decision) -> top-k
+Optional item_type filter (P0.5, data/item_types.py): keeps only games (or only accessories) AFTER ranking.
+The model and its scores are unchanged; without the filter the output is exactly the trained pipeline's.
 """
 import hashlib
 import json
@@ -22,6 +24,7 @@ import polars as pl
 import scipy.sparse as sp
 import torch
 
+from data.item_types import load_item_types
 from ranking.pipeline import (FEATS, TIE_MARGIN, UserBlock, assemble, build_item_state, make_context,
                               new_item_slots, recent_popularity, tie_safe_top)
 from retrieval.two_tower import PAD, embed_users, load_two_tower
@@ -59,6 +62,8 @@ class Recommender:
         self.dfa_ts = (item_feat["dfa_ts"].fill_null(0).to_numpy() if "dfa_ts" in item_feat.columns
                        else np.zeros(len(self.titles), np.int64))
         self.iid_of = {x: i for i, x in enumerate(self.item_ids)}
+        types, self.item_types_source = load_item_types(G, self.item_ids, self.titles, self.texts)
+        self.item_type = np.array(types)                           # game | accessory | other (serving filter only)
 
         self.model, ck, dfa_t = load_two_tower(M / "two_tower.pt", G, "cpu")
         self.hist_len = ck["cfg"]["hist_len"]
@@ -137,7 +142,9 @@ class Recommender:
                 "model_run": self.model_run, "model_dir": str(self.model_dir),
                 "model_loaded_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.loaded_at)), "emb_version": self.emb_version, "index": self.fmeta["index"], "index_knob": self.fmeta["knob"],
                 "retrieval_variant": self.rmeta["retrieval_variant"], "ranker_iterations": self.rmeta["best_iteration"],
-                "cold_user_fallback": self.policy["cold_user_fallback"], "new_item_slots": self.cfg.new_item_slots}
+                "cold_user_fallback": self.policy["cold_user_fallback"], "new_item_slots": self.cfg.new_item_slots,
+                "item_types": {t: int((self.item_type == t).sum()) for t in ("game", "accessory", "other")},
+                "item_types_source": self.item_types_source}
 
     # -------------------------------------------------------------------------------------------
     def user_block(self, rec: dict) -> UserBlock:
@@ -188,7 +195,11 @@ class Recommender:
         timings["ranker"] = time.perf_counter() - t
         return (items, scores, X) if return_features else (items, scores)
 
-    def recommend(self, user_id: str, k: int = 10, rerank: bool = True) -> dict:
+    def keep(self, iids: np.ndarray, item_type: str | None) -> np.ndarray:
+        """iids (order kept) whose item_type matches; all of them when item_type is None."""
+        return iids if item_type is None else iids[self.item_type[iids] == item_type]
+
+    def recommend(self, user_id: str, k: int = 10, rerank: bool = True, item_type: str | None = None) -> dict:
         T0 = time.perf_counter()
         timings = {}
         t = time.perf_counter()
@@ -196,12 +207,12 @@ class Recommender:
         timings["store_get"] = time.perf_counter() - t
 
         if rec is None or rec["n_hist"] == 0:
-            top, scores, source = self.fallback[:k], None, "fallback"
+            top, scores, source = self.keep(self.fallback, item_type)[:k], None, "fallback"
         else:
             items, scores_all = self.score_candidates(rec, timings)
             t = time.perf_counter()
             order = np.argsort(-scores_all, kind="stable")
-            ranked = items[order]
+            ranked = self.keep(items[order], item_type)
             top = (new_item_slots(ranked[:100], self.items.is_new, k, self.cfg.new_item_slots)
                    if rerank and self.cfg.new_item_slots > 0 else ranked[:k])
             score_of = dict(zip(items.tolist(), scores_all.tolist()))
@@ -212,7 +223,7 @@ class Recommender:
         timings["total"] = time.perf_counter() - T0
         return {"user_id": user_id, "source": source,
                 "items": [{"item_id": self.item_ids[i], "title": self.titles[i], "is_new": bool(self.items.is_new[i]),
-                           "score": None if scores is None else round(float(scores[n]), 5)} for n, i in enumerate(top)],
+                           "item_type": str(self.item_type[i]), "score": None if scores is None else round(float(scores[n]), 5)} for n, i in enumerate(top)],
                 "timings_ms": {k_: round(v * 1e3, 3) for k_, v in timings.items()}}
 
     def add_event(self, user_id: str, item_id: str, ts: int | None = None, rating: float | None = None) -> dict:

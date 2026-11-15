@@ -14,7 +14,7 @@ class FakeProduct:
     def items(self, ids):
         return [{"item_id": i} for i in ids]
 
-    def history(self, user_id, k):
+    def history(self, user_id, k, item_type=None):
         return [{"item_id": f"{user_id}-h{j}"} for j in range(k)]
 
 

@@ -16,12 +16,13 @@ export default async function GamePage({ params, searchParams }: {
   const { rid } = await searchParams;
   const itemId = decodeURIComponent(id);
   const [items, similar, why, history] = await Promise.all([
-    engine.items([itemId]), engine.similar(itemId, 16, user.engine_user_id).catch(() => []),
+    engine.items([itemId]), engine.similar(itemId, 16, user.engine_user_id).catch(() => [] as Awaited<ReturnType<typeof engine.similar>>),
     engine.explain(user.engine_user_id, [itemId]).catch(() => null), engine.history(user.engine_user_id, 200),
   ]);
   const g = items[0];
   if (!g) notFound();
   const played = history.some((h) => h.item_id === g.item_id);
+  const playable = g.item_type === "game";   // accessories / gift cards can be viewed, not streamed
   return (
     <div>
       <section className="relative overflow-hidden">
@@ -42,11 +43,19 @@ export default async function GamePage({ params, searchParams }: {
             </div>
             {g.description && <p className="mt-5 max-w-2xl leading-relaxed text-zinc-300">{g.description}</p>}
             <div className="mt-7 flex items-center gap-3">
-              <Link href={`/play/${encodeURIComponent(g.item_id)}${rid ? `?rid=${rid}` : ""}`} data-testid="play-button"
-                    className="rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 px-7 py-3 font-semibold text-black">
-                ▶ {played ? "Play again" : "Play now"}
-              </Link>
-              <span className="text-xs text-zinc-500">Streams instantly. No download.</span>
+              {playable ? (
+                <>
+                  <Link href={`/play/${encodeURIComponent(g.item_id)}${rid ? `?rid=${rid}` : ""}`} data-testid="play-button"
+                        className="rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 px-7 py-3 font-semibold text-black">
+                    ▶ {played ? "Play again" : "Play now"}
+                  </Link>
+                  <span className="text-xs text-zinc-500">Streams instantly. No download.</span>
+                </>
+              ) : (
+                <span data-testid="not-playable" className="rounded-full bg-white/10 px-4 py-2 text-sm text-zinc-300 ring-1 ring-white/15">
+                  {g.item_type === "accessory" ? "Gear" : "Not a game"} · not streamable
+                </span>
+              )}
             </div>
           </div>
           <WhyThis why={why?.items[g.item_id]} />

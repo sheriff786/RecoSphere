@@ -1,7 +1,12 @@
 """Shared request-time state and helpers for the routers (filled by the lifespan in serve/app.py)."""
+from typing import Literal
+
 from fastapi import HTTPException
 
 from serve.product import Product
+
+# Optional filter on lists (data/item_types.py). None = every item (the trained pipeline's output as is).
+ItemType = Literal["game", "accessory", "other"]
 
 # mgr (ModelManager), exposures / clicks (ExposureLogger). Set at startup, cleared at shutdown.
 STATE: dict = {}

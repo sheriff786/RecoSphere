@@ -4,9 +4,12 @@ import "server-only";
 
 const BASE = process.env.ENGINE_URL || "http://127.0.0.1:8000";
 
+// game | accessory | other (engine data/item_types.py). Lists default to games: the app streams games, while the
+// model (trained on Amazon purchases) also ranks controllers, cases and gift cards.
+export type ItemType = "game" | "accessory" | "other";
 export type Game = {
   item_id: string; title: string; platforms: string[]; categories: string[]; year: number | null;
-  description: string; is_new: boolean; plays_90d: number; trending_rank: number;
+  description: string; is_new: boolean; item_type: ItemType; plays_90d: number; trending_rank: number;
   score?: number | null; similarity?: number;
 };
 export type Reason = { group: string; text: string; weight?: number; feature?: string };
@@ -39,17 +42,20 @@ const adminHeaders = (): Record<string, string> =>
   process.env.ENGINE_ADMIN_TOKEN ? { "x-admin-token": process.env.ENGINE_ADMIN_TOKEN } : {};
 
 export const engine = {
-  recommend: (user: string, k = 20) => get<RecResponse>(`/recommend/${enc(user)}?k=${k}&meta=true`),
+  recommend: (user: string, k = 20, type: ItemType = "game") =>
+    get<RecResponse>(`/recommend/${enc(user)}?k=${k}&meta=true&item_type=${type}`),
   explain: (user: string, items?: string[]) =>
     get<{ source: string; arm: string; model_run: string; items: Record<string, Explanation> }>(
       `/explain/${enc(user)}${items?.length ? `?items=${items.map(enc).join(",")}` : ""}`),
-  popular: (k = 24, offset = 0, newOnly = false) =>
-    get<{ items: Game[] }>(`/catalog/popular?k=${k}&offset=${offset}&new_only=${newOnly}`).then((r) => r.items),
+  popular: (k = 24, offset = 0, newOnly = false, type: ItemType = "game") =>
+    get<{ items: Game[] }>(`/catalog/popular?k=${k}&offset=${offset}&new_only=${newOnly}&item_type=${type}`).then((r) => r.items),
   items: (ids: string[]) => get<{ items: Game[] }>(`/catalog/items?ids=${ids.map(enc).join(",")}`).then((r) => r.items),
-  search: (q: string, k = 30) => get<{ items: Game[] }>(`/catalog/search?q=${enc(q)}&k=${k}`).then((r) => r.items),
-  similar: (item: string, k = 12, user?: string) =>
-    get<{ items: Game[] }>(`/catalog/similar/${enc(item)}?k=${k}${user ? `&user_id=${enc(user)}` : ""}`).then((r) => r.items),
-  history: (user: string, k = 20) => get<{ items: Game[] }>(`/users/${enc(user)}/history?k=${k}`).then((r) => r.items),
+  search: (q: string, k = 30, type: ItemType = "game") =>
+    get<{ items: Game[] }>(`/catalog/search?q=${enc(q)}&k=${k}&item_type=${type}`).then((r) => r.items),
+  similar: (item: string, k = 12, user?: string, type: ItemType = "game") =>
+    get<{ items: Game[] }>(`/catalog/similar/${enc(item)}?k=${k}&item_type=${type}${user ? `&user_id=${enc(user)}` : ""}`).then((r) => r.items),
+  history: (user: string, k = 20, type: ItemType = "game") =>
+    get<{ items: Game[] }>(`/users/${enc(user)}/history?k=${k}&item_type=${type}`).then((r) => r.items),
   demoUsers: (k = 9) =>
     get<{ users: { user_id: string; n_games: number; recent: string[] }[] }>(`/users/demo?k=${k}`).then((r) => r.users),
   event: (user: string, item: string) => post(`/event`, { user_id: user, item_id: item }),

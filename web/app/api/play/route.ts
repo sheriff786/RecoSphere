@@ -14,6 +14,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
   const item = String(body.item_id || "");
+  const [g] = await engine.items([item]);
+  if (!g) return NextResponse.json({ error: "unknown item" }, { status: 404 });
+  if (g.item_type !== "game") return NextResponse.json({ error: "not a game" }, { status: 400 });
   const ev = (await engine.event(u.engine_user_id, item)) as { recorded: boolean };
   if (body.rid) await engine.feedback(u.engine_user_id, item, String(body.rid), "play").catch(() => null);
   const playId = startPlay(u.id, item, body.rid || null);
