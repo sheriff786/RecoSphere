@@ -10,7 +10,7 @@ PROFILES := obs
 PY       ?= python
 
 .DEFAULT_GOAL := help
-.PHONY: help up up-all down logs ps test smoke config e2e e2e-synthetic
+.PHONY: help up up-all down logs ps test smoke config e2e e2e-synthetic db-migrate db-status db-check
 
 help:            ## list the targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/'
@@ -46,6 +46,16 @@ e2e:             ## browser e2e (Playwright) against the running stack: make up 
 
 e2e-synthetic:   ## browser e2e on a throwaway synthetic stack, incl. roll back (what CI runs; no Docker)
 	bash scripts/e2e_stack.sh
+
+# App database (DB_SCHEMA.md). URLs come from web/.env.local (git-ignored): DATABASE_URL_DIRECT for these.
+db-migrate:      ## apply pending SQL migrations (web/db/migrations) to the app database
+	cd web && node --env-file=.env.local db/migrate.mjs
+
+db-status:       ## list applied / pending migrations, change nothing
+	cd web && node --env-file=.env.local db/migrate.mjs --status
+
+db-check:        ## run every schema rule against the app database (one transaction, rolled back)
+	cd web && node --env-file=.env.local db/check_schema.mjs
 
 config:          ## validate the compose file for core and for every profile (no daemon needed)
 	docker compose -f infra/compose/docker-compose.yml --env-file .env.example config --quiet

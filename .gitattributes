@@ -1,0 +1,2 @@
+# SQL migrations are checksummed by web/db/migrate.mjs: keep them byte-stable (LF) on every OS
+*.sql text eol=lf

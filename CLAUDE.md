@@ -52,6 +52,7 @@ python -m data.item_types --write                     # game/accessory/other per
 cd web; npm run dev                                   # app on :3000 (needs .env.local from .env.example)
 bash scripts/ci_smoke.sh                              # whole system on synthetic data (WSL / Git Bash)
 make up / up-all / down / config / help               # Docker stack (Git Bash); config: .env from .env.example
+make db-migrate / db-status / db-check   # app DB (Neon) migrations + schema rules; URLs in web/.env.local
 make e2e            # Playwright vs the running stack (no rollback)   make e2e-synthetic   # throwaway stack, = CI job e2e
 ```
 
@@ -70,6 +71,9 @@ make e2e            # Playwright vs the running stack (no rollback)   make e2e-s
 - **Item types are a serving filter, not a feature:** the model still ranks accessories (it learned Amazon
   purchases); the app asks for `item_type=game` everywhere (`web/lib/engine.ts` defaults). Never add item_type
   to the ranker without retraining + the gate. Rules + audit: `data/item_types.py`.
+- **App DB (DB_SCHEMA.md):** Neon is the main DB. Migrations are forward-only files in `web/db/migrations`
+  (never edit an applied one; the runner refuses a changed checksum); run them on the DIRECT host, the app uses
+  the `-pooler` host. The Neon URL lives only in `web/.env.local`; CI uses a Postgres 16 container (job `db`).
 - **API doc:** any change that adds, changes or removes an engine route or a web `/api/*` route updates
   `docs/API.md` (table row + section + change log) in the same commit. `tests/test_api_doc.py` enforces it.
 - **Web:** the browser never calls the engine directly; logout navigates client-side (a server redirect

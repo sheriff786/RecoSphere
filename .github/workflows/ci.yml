@@ -85,3 +85,37 @@ jobs:
             web/playwright-report/
             web/test-results/
           retention-days: 7
+
+  # P1: app DB migrations + every schema rule in DB_SCHEMA.md, on a throwaway Postgres 16 (never Neon:
+  # no secret in CI). Runs migrate twice: the second run must be a no-op.
+  db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: recosphere
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:ci@127.0.0.1:5432/recosphere
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Migrate
+        run: node db/migrate.mjs
+      - name: Schema rules (DB_SCHEMA.md)
+        run: node db/check_schema.mjs
+      - name: Migrate again (must be a no-op)
+        run: node db/migrate.mjs | tee /dev/stderr | grep -q "up to date"
