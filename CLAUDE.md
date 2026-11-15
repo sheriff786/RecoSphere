@@ -23,7 +23,7 @@ offline: pipeline.run (train -> evaluate -> paired-bootstrap gate -> promote), M
 online:  FastAPI engine (Redis, hot swap, A/B, /metrics, product API) <- Next.js app (web/)
 ```
 
-Real results and every incident: `REPORT.md`. A/B method: `docs/AB_TESTING.md`.
+Real results and every incident: `REPORT.md`. A/B method: `docs/AB_TESTING.md`. Every endpoint: `docs/API.md`.
 
 ## Layout
 | Path | What |
@@ -66,6 +66,8 @@ make e2e            # Playwright vs the running stack (no rollback)   make e2e-s
 - **Hot swap:** load in the background, smoke test, swap one reference; the feature store is not reloaded.
 - **A/B:** assignment = salted sha256 by user; never decide when MDE > 10%; guardrails include coverage
   and new-item share; keep-alive HTTP in simulators (Windows port exhaustion).
+- **API doc:** any change that adds, changes or removes an engine route or a web `/api/*` route updates
+  `docs/API.md` (table row + section + change log) in the same commit. `tests/test_api_doc.py` enforces it.
 - **Web:** the browser never calls the engine directly; logout navigates client-side (a server redirect
   sent users to `localhost` and lost the cookie).
 - **.gitignore:** the root has `lib/` (Python template), so `!web/lib/` must stay. `data/` FILES are

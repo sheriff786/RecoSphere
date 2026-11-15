@@ -62,5 +62,5 @@ make up                              # Docker: app :3000 · API :8000 (make up-a
 cd web && npm install && npm run dev # or just the app, against a running engine
 ```
 
-Docs: [REPORT.md](REPORT.md) · [pipeline](pipeline/README.md) · [serving](serve/README.md) ·
+Docs: [REPORT.md](REPORT.md) · [API reference](docs/API.md) · [pipeline](pipeline/README.md) · [serving](serve/README.md) ·
 [A/B testing](docs/AB_TESTING.md) · [monitoring + CI](infra/monitoring/README.md) · [orchestration](infra/airflow/README.md)
