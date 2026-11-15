@@ -106,17 +106,22 @@ Why games are in this user's feed. Used by the app's "Why this?" panel.
 
 | Query | Default | Meaning |
 |---|---|---|
-| `items` | the user's top 10 | comma-separated item ids to explain |
+| `items` | the user's served top 10 | comma-separated item ids to explain |
+| `item_type` | – | the feed the user sees (`game` in the app): decides the served top 10 for `in_top10` and the default `items` |
 
-**How it works** (`serve/product.py: Product.explain`), with the model of the user's A/B arm:
-re-scores the user's candidates, then for each item takes the LightGBM feature contributions
+**How it works** (`serve/product.py: Product.explain`), with the model and policy of the user's A/B arm:
+re-scores the user's candidates and rebuilds the served top 10 exactly like `/recommend` (ranker order →
+`item_type` filter → new-item slots); then for each item takes the LightGBM feature contributions
 (SHAP, `booster.predict(pred_contrib=True)`), maps positive ones to plain-language reasons (`REASON` table;
 user-only features are skipped because they do not separate items), keeps the top 3 groups, and finds the
 closest game in the user's history by item-embedding cosine ("because you played").
 
 Response: `{"user_id", "arm", "model_run", "source", "items": {<item_id>: {...}}}`. Per item:
-`in_candidates`, `rank`, `n_candidates`, `score`, `sources` (`taste model` / `trending`),
-`because_you_played`, `reasons: [{group, text, weight, feature}]`. An item outside the candidate set gets
+`in_candidates`, `in_top10` (is it in the user's served top 10?), `rank` (ranker position among all
+candidates), `n_candidates`, `score`, `sources` (`taste model` / `trending`), `because_you_played`,
+`reasons: [{group, text, weight, feature, share, strength}]`. `weight` = raw SHAP contribution (admin only in
+the app); `share` = weight / sum of the item's positive explainable contributions; `strength` = `strong`
+(share ≥ 0.40), `medium` (≥ 0.20) or `weak` (thresholds are a product choice, `serve/product.py`). An item outside the candidate set gets
 `in_candidates: false` and a "Similar to ..." reason. A user without history gets `source: "fallback"` and a
 generic "popular" reason.
 
@@ -248,6 +253,7 @@ Postgres in P1).
 | POST | `/api/play` | start / end a play session | `POST /event`, `POST /feedback` (play) |
 | POST | `/api/feedback` | click beacon from a recommendation tile | `POST /feedback` |
 | GET | `/api/admin/summary` | admin dashboard data | `GET /admin/summary` |
+| GET | `/api/admin/explain` | admin "Why-this inspector": raw explanation | `GET /explain/{user_id}?items=&item_type=game` |
 | POST | `/api/admin/rollback` | admin "Roll back" button | `POST /admin/rollback` |
 
 The pages themselves (home, game, search, library, onboarding) call the engine while rendering on the server:
@@ -286,6 +292,12 @@ Body `{"request_id", "item_id", "action"?}` (`play`, anything else counts as `cl
 `POST /feedback` with the session's engine user id; engine errors are swallowed (a lost click must not
 break navigation). → `{"ok": true}`; `400` missing fields; `401`.
 
+### GET `/api/admin/explain`
+Admins only (`403` otherwise). Query `user_id` (engine user id, e.g. `app:3` or a dataset id) and `item_id`,
+both required (`400`). Returns the engine's `/explain` for that one item with the `game` feed as context,
+including the raw SHAP `weight`, `rank`, `n_candidates` and `score` that the user-facing "Why this?" panel
+hides (users only see strength bars). Engine errors → `502 {"error": ...}`.
+
 ### GET `/api/admin/summary` · POST `/api/admin/rollback`
 Admins only (email listed in `ADMIN_EMAILS`), else `403 {"error": "forbidden"}`. Forward to the engine's
 `/admin/summary` and `/admin/rollback` with `X-Admin-Token: ENGINE_ADMIN_TOKEN` when set. Rollback errors
@@ -295,4 +307,5 @@ Admins only (email listed in `ADMIN_EMAILS`), else `403 {"error": "forbidden"}`.
 | Date | Change |
 |---|---|
 | 2026-11-15 | First version: 15 engine endpoints, 9 web API routes. |
+| 2026-11-15 | P0.5 item 2: `/explain` gets `item_type`, `in_top10`, reason `share` + `strength`; web `/api/admin/explain`. |
 | 2026-11-15 | P0.5 item 1: `item_type` filter on `/recommend`, `/catalog/popular`, `/catalog/search`, `/catalog/similar`, `/users/{id}/history`; `item_type` in cards and `/health`. |

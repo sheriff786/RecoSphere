@@ -12,9 +12,11 @@ export type Game = {
   description: string; is_new: boolean; item_type: ItemType; plays_90d: number; trending_rank: number;
   score?: number | null; similarity?: number;
 };
-export type Reason = { group: string; text: string; weight?: number; feature?: string };
+export type Reason = {
+  group: string; text: string; weight?: number; feature?: string; share?: number; strength?: "strong" | "medium" | "weak";
+};
 export type Explanation = {
-  in_candidates?: boolean; rank?: number; n_candidates?: number; score?: number; sources?: string[];
+  in_candidates?: boolean; in_top10?: boolean; rank?: number; n_candidates?: number; score?: number; sources?: string[];
   because_you_played?: string | null; reasons: Reason[];
 };
 export type RecResponse = {
@@ -44,9 +46,9 @@ const adminHeaders = (): Record<string, string> =>
 export const engine = {
   recommend: (user: string, k = 20, type: ItemType = "game") =>
     get<RecResponse>(`/recommend/${enc(user)}?k=${k}&meta=true&item_type=${type}`),
-  explain: (user: string, items?: string[]) =>
+  explain: (user: string, items?: string[], type: ItemType = "game") =>
     get<{ source: string; arm: string; model_run: string; items: Record<string, Explanation> }>(
-      `/explain/${enc(user)}${items?.length ? `?items=${items.map(enc).join(",")}` : ""}`),
+      `/explain/${enc(user)}?item_type=${type}${items?.length ? `&items=${items.map(enc).join(",")}` : ""}`),
   popular: (k = 24, offset = 0, newOnly = false, type: ItemType = "game") =>
     get<{ items: Game[] }>(`/catalog/popular?k=${k}&offset=${offset}&new_only=${newOnly}&item_type=${type}`).then((r) => r.items),
   items: (ids: string[]) => get<{ items: Game[] }>(`/catalog/items?ids=${ids.map(enc).join(",")}`).then((r) => r.items),

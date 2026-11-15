@@ -48,8 +48,8 @@ def recommend(user_id: str, k: int = Query(10, ge=1, le=50), rerank: bool = True
 
 
 @router.get("/explain/{user_id}")
-def explain(user_id: str, items: str | None = None):
+def explain(user_id: str, items: str | None = None, item_type: ItemType | None = None):
     mgr = STATE["mgr"]
     rec, _, arm, _ = mgr.experiments.route(user_id, mgr.current)   # explain with the model this user is served
     return {"user_id": user_id, "arm": arm, "model_run": rec.model_run,
-            **product(rec).explain(user_id, deps.ids(items) or None)}
+            **product(rec).explain(user_id, deps.ids(items) or None, item_type=item_type)}

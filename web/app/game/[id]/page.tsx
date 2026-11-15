@@ -34,12 +34,16 @@ export default async function GamePage({ params, searchParams }: {
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-white md:text-4xl" data-testid="game-title">{g.title}</h1>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              {[g.year && String(g.year), ...g.platforms, ...g.categories].filter(Boolean).map((t) => (
+              {/* a platform can also be a category ("PC"): dedupe, React keys must be unique */}
+              {[...new Set([g.year && String(g.year), ...g.platforms, ...g.categories].filter(Boolean))].map((t) => (
                 <span key={t as string} className="rounded-full bg-white/10 px-2.5 py-1 text-zinc-200">{t}</span>))}
               {g.is_new && <span className="rounded-full bg-cyan-400/20 px-2.5 py-1 text-cyan-200">New on RecoSphere</span>}
             </div>
             <div className="mt-4 text-sm text-zinc-400">
-              {g.plays_90d > 0 ? `${g.plays_90d.toLocaleString()} players in the last 90 days · trending #${g.trending_rank}` : "Brand new: no players yet"}
+              {/* a trending rank means little for a game almost nobody plays: rank only from 20 players / 90 days */}
+              {g.plays_90d >= 20 ? `${g.plays_90d.toLocaleString()} players in the last 90 days · trending #${g.trending_rank.toLocaleString()}`
+                : g.plays_90d > 0 ? `${g.plays_90d.toLocaleString()} player${g.plays_90d === 1 ? "" : "s"} in the last 90 days`
+                : "Brand new: no players yet"}
             </div>
             {g.description && <p className="mt-5 max-w-2xl leading-relaxed text-zinc-300">{g.description}</p>}
             <div className="mt-7 flex items-center gap-3">

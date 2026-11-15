@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from ranking.pipeline import FEATS
+from ranking.pipeline import FEATS, new_item_slots
 
 # feature -> (reason group, plain-language text). User-only features are the same for every candidate of a
 # user, so they never explain why THIS item ranks above another -> excluded from reasons.
@@ -47,6 +47,13 @@ REASON = {
     "rated": ("format", "Rating fits your history"),
 }
 USER_ONLY = {"u_n_hist", "u_days_since_last", "u_span_days", "u_mean_rating"}
+# Strength of a reason for users (raw SHAP stays for /admin): its share of everything that pushed THIS item up.
+# Thresholds are a product choice (P0.5), not a measured quantity.
+STRONG, MEDIUM = 0.40, 0.20
+
+
+def strength(share: float) -> str:
+    return "strong" if share >= STRONG else "medium" if share >= MEDIUM else "weak"
 PLATFORMS = [("PlayStation 5", "PS5"), ("PlayStation 4", "PS4"), ("PlayStation 3", "PS3"), ("PS Vita", "Vita"),
              ("Xbox Series", "Xbox Series"), ("Xbox One", "Xbox One"), ("Xbox 360", "Xbox 360"),
              ("Nintendo Switch", "Switch"), ("Wii U", "Wii U"), ("3DS", "3DS"), ("PC", "PC"), ("Mac", "Mac")]
@@ -152,8 +159,17 @@ class Product:
         return out
 
     # ------------------------------------------------------------------ explain
-    def explain(self, user_id: str, item_ids: list[str] | None = None, top_reasons=3):
-        """Explanations for `item_ids` (default: the user's current top-10)."""
+    def feed_top10(self, items: np.ndarray, scores: np.ndarray, item_type=None) -> np.ndarray:
+        """The user's served top-10 for these candidates: ranker order -> type filter -> new-item slots
+        (same steps and arm policy as Recommender.recommend)."""
+        ranked = self.rec.keep(items[np.argsort(-scores, kind="stable")], item_type)
+        slots = self.rec.cfg.new_item_slots
+        return new_item_slots(ranked[:100], self.rec.items.is_new, 10, slots) if slots > 0 else ranked[:10]
+
+    def explain(self, user_id: str, item_ids: list[str] | None = None, top_reasons=3, item_type=None):
+        """Explanations for `item_ids` (default: the user's served top-10 for `item_type`). Each item says whether
+        it is in that top-10 (`in_top10`); each reason carries its raw SHAP `weight`, its `share` of the item's
+        positive contributions and a `strength` label."""
         _, r = self.rec.store.get(user_id)
         if r is None or r["n_hist"] == 0:
             return {"source": "fallback", "items": {x: {"reasons": [{"group": "popular",
@@ -163,8 +179,9 @@ class Product:
         order = np.argsort(-scores, kind="stable")
         pos = {int(items[j]): n + 1 for n, j in enumerate(order)}
         idx_of = {int(it): j for j, it in enumerate(items)}
+        top10 = {int(i) for i in self.feed_top10(items, scores, item_type)}
         if item_ids is None:
-            item_ids = [self.rec.item_ids[int(items[j])] for j in order[:10]]
+            item_ids = [self.rec.item_ids[int(i)] for i in self.feed_top10(items, scores, item_type)]
         want = [self.rec.iid_of[x] for x in item_ids if x in self.rec.iid_of]
         rows = [idx_of[i] for i in want if i in idx_of]
         Xr = X.iloc[rows] if hasattr(X, "iloc") else X[rows]
@@ -177,23 +194,25 @@ class Product:
             sim_hist = self.Vn[hist] @ self.Vn[i] if hist else np.array([])
             because = self.rec.titles[hist[int(np.argmax(sim_hist))]] if len(sim_hist) else None
             if i not in idx_of:
-                out[key] = {"in_candidates": False, "because_you_played": because,
+                out[key] = {"in_candidates": False, "in_top10": False, "because_you_played": because,
                             "reasons": [{"group": "similar", "text": f"Similar to {because}" if because else "Explore"}]}
                 continue
             j = idx_of[i]
             c = contrib[rows.index(j)][:-1]
-            groups = {}
+            groups, total = {}, 0.0
             for f, v in zip(FEATS, c):
                 if f in USER_ONLY or f not in REASON or v <= 0:
                     continue
+                total += float(v)
                 g, text = REASON[f]
                 if g not in groups or v > groups[g][0]:
                     groups[g] = (float(v), text, f)
             reasons = sorted(groups.values(), reverse=True)[:top_reasons]
             feats = {f: float(Xv[j, n]) for n, f in enumerate(FEATS)}
             src = [s for s, ok in (("taste model", feats["in_tt"] > 0), ("trending", feats["in_pop"] > 0)) if ok]
-            out[key] = {"in_candidates": True, "rank": pos[i], "n_candidates": len(items),
+            out[key] = {"in_candidates": True, "in_top10": i in top10, "rank": pos[i], "n_candidates": len(items),
                         "score": round(float(scores[j]), 4), "sources": src, "because_you_played": because,
-                        "reasons": [{"group": REASON[f][0], "text": t, "weight": round(v, 3), "feature": f}
+                        "reasons": [{"group": REASON[f][0], "text": t, "weight": round(v, 3), "feature": f,
+                                     "share": round(v / total, 3), "strength": strength(v / total)}
                                     for v, t, f in reasons]}
         return {"source": "personalized", "items": out}

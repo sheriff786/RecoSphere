@@ -16,11 +16,17 @@ export default function Player({ game, rid }: { game: Game; rid?: string }) {
   const [status, setStatus] = useState<"connecting" | "live" | "ended">("connecting");
   const [firstTime, setFirstTime] = useState<boolean | null>(null);
 
+  // ONE start request per game, even when React runs this effect twice (StrictMode in dev: mount, cleanup,
+  // mount). A second POST would log a second play and make the engine answer "played before".
+  const startReq = useRef<{ item: string; done: Promise<{ play_id: number; first_time: boolean }> } | null>(null);
+
   useEffect(() => {
     let alive = true;
-    fetch("/api/play", { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ item_id: game.item_id, rid }) })
-      .then((r) => r.json()).then((d) => { if (!alive) return; playId.current = d.play_id; setFirstTime(d.first_time); setStatus("live"); started.current = Date.now(); });
+    if (startReq.current?.item !== game.item_id) {
+      startReq.current = { item: game.item_id, done: fetch("/api/play", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ item_id: game.item_id, rid }) }).then((r) => r.json()) };
+    }
+    startReq.current.done.then((d) => { if (!alive) return; playId.current = d.play_id; setFirstTime(d.first_time); setStatus("live"); started.current = Date.now(); });
     const end = () => {
       if (playId.current == null) return;
       navigator.sendBeacon("/api/play", new Blob([JSON.stringify({ end: true, play_id: playId.current, seconds: (Date.now() - started.current) / 1000 })], { type: "application/json" }));

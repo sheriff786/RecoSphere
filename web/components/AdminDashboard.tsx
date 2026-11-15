@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import type { AdminSummary } from "@/lib/engine";
+import type { AdminSummary, Explanation } from "@/lib/engine";
 
 const pct = (x: number | null | undefined) => (x == null ? "–" : `${(100 * x).toFixed(2)}%`);
 
@@ -89,7 +89,46 @@ export default function AdminDashboard() {
           </tbody>
         </table>
       </section>
+      <ExplainInspector />
       <p className="text-xs text-zinc-500">Deeper views: Grafana (localhost:3001 in docker compose), Prometheus alerts (localhost:9090/alerts), MLflow UI.</p>
     </div>
+  );
+}
+
+// Raw explanation for any user + item: ranker position, score and SHAP weights (users only see strength bars).
+function ExplainInspector() {
+  const [user, setUser] = useState(""); const [item, setItem] = useState("");
+  const [res, setRes] = useState<Explanation | null>(null); const [err, setErr] = useState<string | null>(null);
+  async function run(e: React.FormEvent) {
+    e.preventDefault(); setErr(null); setRes(null);
+    const r = await fetch(`/api/admin/explain?user_id=${encodeURIComponent(user)}&item_id=${encodeURIComponent(item)}`);
+    const j = await r.json();
+    if (!r.ok) { setErr(j.error ?? `HTTP ${r.status}`); return; }
+    const x = j.items?.[item];
+    if (x) setRes(x); else setErr("no explanation (unknown item, or the user has no history)");
+  }
+  const field = "rounded-lg bg-white/5 px-3 py-2 text-sm text-white ring-1 ring-white/10 outline-none";
+  return (
+    <section className="rounded-xl bg-white/[0.03] p-5 ring-1 ring-white/10" data-testid="explain-inspector">
+      <h2 className="text-lg font-semibold text-white">Why-this inspector</h2>
+      <form onSubmit={run} className="mt-3 flex flex-wrap gap-2">
+        <input value={user} onChange={(e) => setUser(e.target.value)} placeholder="engine user id (e.g. app:3)" className={field} aria-label="user id" />
+        <input value={item} onChange={(e) => setItem(e.target.value)} placeholder="item id" className={field} aria-label="item id" />
+        <button className="rounded-full bg-white/10 px-4 py-2 text-sm text-white ring-1 ring-white/20">Explain</button>
+      </form>
+      {err && <p className="mt-2 text-sm text-rose-300">{err}</p>}
+      {res && (
+        <div className="mt-4 text-sm text-zinc-300" data-testid="explain-raw">
+          <p>in top 10 (game feed): <b>{String(res.in_top10)}</b> · ranker position {res.rank ?? "–"} of {res.n_candidates ?? "–"} candidates (all types, before slots) · score {res.score ?? "–"} · found by {res.sources?.join(" + ") || "–"}</p>
+          <table className="mt-2 w-full text-left">
+            <thead className="text-xs uppercase text-zinc-500"><tr><th className="py-1">Reason</th><th>Feature</th><th>SHAP weight</th><th>Share</th><th>Strength</th></tr></thead>
+            <tbody>{res.reasons.map((r) => (
+              <tr key={r.text}><td className="py-1">{r.text}</td><td className="font-mono">{r.feature ?? "–"}</td>
+                <td className="font-mono">{r.weight?.toFixed(3) ?? "–"}</td><td>{r.share == null ? "–" : `${(r.share * 100).toFixed(1)}%`}</td><td>{r.strength ?? "–"}</td></tr>))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }

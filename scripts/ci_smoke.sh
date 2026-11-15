@@ -53,6 +53,13 @@ acc = g("/catalog/popular?k=20&item_type=accessory")["items"]
 assert acc and all(x["item_type"] == "accessory" and "Controller" in x["title"] for x in acc), acc[:2]
 assert g("/catalog/search?q=controller&item_type=game")["items"] == []
 assert all(x["item_type"] == "game" for x in g(f"/catalog/similar/{pop[0]['item_id']}?k=10&item_type=game")["items"])
+# P0.5 item 2: explain knows the served top-10 and gives strength labels
+feed = [x["item_id"] for x in g("/recommend/app:ci?k=10&item_type=game")["items"]]
+exg = g("/explain/app:ci?item_type=game")["items"]
+assert set(exg) == set(feed) and all(v["in_top10"] for v in exg.values()), (sorted(exg), feed)
+assert all(r["strength"] in ("strong", "medium", "weak") and 0 <= r["share"] <= 1 for v in exg.values() for r in v["reasons"])
+played = pop[0]["item_id"]
+assert g(f"/explain/app:ci?items={played}&item_type=game")["items"][played]["in_top10"] is False
 assert g("/admin/summary")["health"]["model_run"] == "ci"
 print("product API ok")
 PY

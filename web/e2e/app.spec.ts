@@ -9,7 +9,7 @@ const ALLOW_ROLLBACK = process.env.E2E_ALLOW_ROLLBACK === "1";
 const PASSWORD = "e2e-password-123";
 const ENGINE = process.env.E2E_ENGINE_URL ?? "http://127.0.0.1:8000";
 // A game title never contains these words: data/item_types.py classifies such items as accessories.
-const ACCESSORY_WORDS = /(controllers?|gamepads?|headsets?|chargers?)/i;
+const ACCESSORY_WORDS = /\b(controllers?|gamepads?|headsets?|chargers?)\b/i;
 
 test.describe.configure({ mode: "serial" });
 
@@ -93,6 +93,9 @@ test("new user: signup -> onboarding -> personalized feed -> play changes it -> 
   await card.click();
   await expect(page.getByTestId("game-title")).toHaveText(title);
   await expect(page.getByTestId("why-this")).toBeVisible();
+  await expect(page.getByTestId("why-title")).toHaveText("Why this?");             // it IS in the feed top 10
+  const whyText = (await page.getByTestId("why-this").textContent()) ?? "";
+  expect(whyText, "users see strength bars, not SHAP numbers or ranks").not.toMatch(/\d\.\d{2}|candidates/);
 
   // play it: the engine records the event
   await page.getByTestId("play-button").click();
@@ -106,6 +109,10 @@ test("new user: signup -> onboarding -> personalized feed -> play changes it -> 
   const after = await cardIds(top);
   expect(after, "a played game is never recommended again").not.toContain(played);
   expect(after).not.toEqual(before);
+
+  // the played game is no longer in the feed: its panel explains the score instead of claiming "why this"
+  await page.goto(`/game/${encodeURIComponent(played)}`);
+  await expect(page.getByTestId("why-title")).toHaveText("How this game scores for you");
 
   // sign out, sign in again: straight to the feed (already onboarded), still personalized
   await page.getByRole("button", { name: "Sign out" }).click();
@@ -135,11 +142,38 @@ test("accessories are never offered as games: search, game page, play", async ({
   expect((await page.request.post("/api/play", { data: { item_id: gear.item_id } })).status()).toBe(400);
 });
 
+test("game page hides the trending rank of a game with fewer than 20 players in 90 days", async ({ page, request }) => {
+  let rare: { item_id: string; plays_90d: number } | undefined;
+  for (let offset = 0; offset < 3000 && !rare; offset += 100) {
+    const items = (await (await request.get(`${ENGINE}/catalog/popular?k=100&offset=${offset}&item_type=game`)).json()).items;
+    if (!items.length) break;
+    rare = items.find((x: { plays_90d: number }) => x.plays_90d > 0 && x.plays_90d < 20);
+  }
+  test.skip(!rare, "no game with 1-19 players in 90 days in this catalog");
+  await page.goto("/signup");
+  await page.getByPlaceholder("Email").fill(`e2e-rare-${Date.now()}@example.test`);
+  await page.getByPlaceholder(/^Password/).fill(PASSWORD);
+  await page.getByRole("button", { name: "Create account" }).click();
+  await atPath(page, "/onboarding");
+  await page.goto(`/game/${encodeURIComponent(rare!.item_id)}`);
+  await expect(page.getByText(/in the last 90 days/)).toBeVisible();
+  await expect(page.getByText(/trending #/)).toHaveCount(0);
+});
+
 test("admin: engine dashboard shows the live model and the A/B table", async ({ page }) => {
   await login(page, ADMIN_EMAIL, ADMIN_PASSWORD);
   await page.goto("/admin");
   await expect(page.getByTestId("admin-model")).not.toBeEmpty();
   await expect(page.getByRole("heading", { name: "A/B experiment" })).toBeVisible();
+
+  // Why-this inspector: the raw numbers users never see
+  const who = (await (await page.request.get(`${ENGINE}/users/demo?k=1`)).json()).users[0].user_id;
+  const what = (await (await page.request.get(`${ENGINE}/recommend/${encodeURIComponent(who)}?k=1&item_type=game`)).json()).items[0].item_id;
+  await page.getByLabel("user id").fill(who);
+  await page.getByLabel("item id").fill(what);
+  await page.getByRole("button", { name: "Explain" }).click();
+  await expect(page.getByTestId("explain-raw")).toContainText("in top 10 (game feed): true");
+  await expect(page.getByTestId("explain-raw")).toContainText(/\d\.\d{3}/);            // SHAP weights
   expect((await page.request.get("/api/admin/summary")).status()).toBe(200);
 });
 
