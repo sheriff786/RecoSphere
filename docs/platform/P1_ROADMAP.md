@@ -1,7 +1,7 @@
 # P1 roadmap: app data on Postgres (Neon) through a Python ORM
 
-Status: decisions approved 2026-11-17. **Phase A done** (connection, models, Alembic baseline, `/health`);
-B-H open. The schema itself was applied on Neon in commit `ca015cd`.
+Status: decisions approved 2026-11-17. **Phases A and B done** (connection, models, Alembic baseline,
+`/health`; schemas + services with tests); C-H open. The schema itself was applied on Neon in commit `ca015cd`.
 
 Legend: 🆕 new · ✏️ modified · 🗑️ removed · ✅ exists, unchanged
 
@@ -186,8 +186,16 @@ One phase = one commit, CI green, and a check with the owner before the next one
   `selectinload`/joins, no N+1 queries); every phase measures request time before and after.
   Measured in phase A: `pool_pre_ping` added a round trip to every request (first statement 813 ms with it,
   532 ms without), so it is off and `pool_recycle=240` covers Neon's 5-minute suspend instead. A transaction's
-  `BEGIN` is the second round trip of every request: read-only endpoints can drop it with an autocommit
-  session (decide in phase B).
+  `BEGIN` is the second round trip of every request.
+  Decided in phase B (measured 2026-11-17, laptop -> Neon, warm pool, median of 7, nothing written):
+  - **Reads use an autocommit session** (`db/session.py: get_autocommit_db`): session -> user 263-278 ms
+    instead of 785-828 ms in a normal transaction (BEGIN + SELECT + ROLLBACK).
+  - **Play start is ONE statement** (`play_service.start_statement`: data-modifying CTEs insert the play,
+    upsert the library and compute `first_time`). One statement is atomic by itself, so it may run on the
+    autocommit session: 1 round trip (estimate; measured inside savepoints: 1,573 ms with the first
+    6-statement version, 833 ms now). `tests/app_api/test_play_service.py` pins it to exactly one statement
+    and proves atomicity in the database (a failing library trigger leaves no play row).
+  - Login/signup stay multi-statement transactions (rare, and bcrypt itself costs about 0.25 s).
 - **Every endpoint** is documented in `docs/API.md` in the same commit (the doc test will cover app_api).
 
 ## Decisions

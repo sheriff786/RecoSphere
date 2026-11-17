@@ -77,6 +77,8 @@ make e2e            # Playwright vs the running stack (no rollback)   make e2e-s
   Never edit tables by hand; `web/db/migrate.mjs` is frozen (Neon is stamped `0001_baseline`). Alembic uses the
   DIRECT host, the app the `-pooler` host; URLs only in `app_api/.env` / `web/.env.local`; CI uses Postgres 16.
   Pool: no pre-ping (it costs a round trip per request), `pool_recycle=240`; `prepare_threshold=None` for PgBouncer.
+  `get_autocommit_db` only for reads and SINGLE-statement writes (pinned by a statement-count test); anything with
+  two writes runs in `services/tx.transaction`. Services raise `services/errors.py`, never HTTP errors.
 - **API doc:** any change that adds, changes or removes an engine route or a web `/api/*` route updates
   `docs/API.md` (table row + section + change log) in the same commit. `tests/test_api_doc.py` enforces it.
 - **Web:** the browser never calls the engine directly; logout navigates client-side (a server redirect

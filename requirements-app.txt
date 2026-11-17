@@ -5,4 +5,5 @@ sqlalchemy>=2.0,<3
 alembic>=1.13
 psycopg[binary]>=3.2
 pydantic-settings>=2.4
+bcrypt>=4.1             # password hashing (auth_service); >= 5 refuses passwords over 72 bytes
 certifi>=2024.2.2   # CA bundle for sslmode=verify-full (libpq's "system" store is not found on Windows)

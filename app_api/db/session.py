@@ -53,3 +53,20 @@ def get_db() -> Iterator[Session]:
         yield db
     finally:
         db.close()
+
+
+@lru_cache
+def get_autocommit_sessionmaker() -> sessionmaker[Session]:
+    return sessionmaker(bind=get_engine().execution_options(isolation_level="AUTOCOMMIT"), expire_on_commit=False)
+
+
+def get_autocommit_db() -> Iterator[Session]:
+    """FastAPI dependency for READS and SINGLE-STATEMENT writes: no BEGIN / COMMIT / ROLLBACK round trips.
+    Measured 2026-11-17 on Neon: session -> user 263 ms here vs 785 ms in a normal transaction. Only for
+    service calls that send exactly one statement (a single statement is atomic by itself); tests pin
+    the statement count of each such call."""
+    db = get_autocommit_sessionmaker()()
+    try:
+        yield db
+    finally:
+        db.close()
