@@ -55,6 +55,7 @@ bash scripts/ci_smoke.sh                              # whole system on syntheti
 make up / up-all / down / config / help               # Docker stack (Git Bash); config: .env from .env.example
 make app-api / db-upgrade / db-current / db-drift   # app_api on :8100; Alembic on the app DB; URLs in app_api/.env
 make load-catalog   # gold catalog -> Neon `games` (idempotent; run after new data, after `python -m data.item_types --write`)
+ADMIN_PASSWORD=... python -m app_api.cli create-admin --email <email>   # first admin (or promote an account)
 make e2e            # Playwright vs the running stack (no rollback)   make e2e-synthetic   # throwaway stack, = CI job e2e
 ```
 
@@ -80,6 +81,7 @@ make e2e            # Playwright vs the running stack (no rollback)   make e2e-s
   Pool: no pre-ping (it costs a round trip per request), `pool_recycle=240`; `prepare_threshold=None` for PgBouncer.
   `get_autocommit_db` only for reads and SINGLE-statement writes (pinned by a statement-count test); anything with
   two writes runs in `services/tx.transaction`. Services raise `services/errors.py`, never HTTP errors.
+  Every app_api route except /health needs X-Service-Token (SERVICE_TOKEN in app_api/.env; fails closed when unset).
 - **API doc:** any change that adds, changes or removes an engine route or a web `/api/*` route updates
   `docs/API.md` (table row + section + change log) in the same commit. `tests/test_api_doc.py` enforces it.
 - **Web:** the browser never calls the engine directly; logout navigates client-side (a server redirect

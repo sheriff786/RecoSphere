@@ -1,7 +1,19 @@
 # P1 roadmap: app data on Postgres (Neon) through a Python ORM
 
-Status: decisions approved 2026-11-17. **Phases A, B and C done** (connection, models, Alembic baseline,
-`/health`; schemas + services; the catalog in `games`, see DB_SCHEMA.md); D-H open. The schema itself was applied on Neon in commit `ca015cd`.
+Status: decisions approved 2026-11-17. **Phases A-D done** (connection, models, Alembic baseline, `/health`;
+schemas + services; the catalog in `games`; the HTTP routes, docs/API.md section 3); E-H open.
+
+**Re-cut on 2026-11-17 (approved):** D and E as first planned were coupled: a user created in Neon cannot onboard
+or play while those still live in SQLite (integer user ids, foreign keys). So **D = all app_api HTTP routes** (auth,
+library, plays, feedback, admin audit; the web app still on SQLite, nothing breaks) and **E = the web app switches
+to app_api in one go** (login, onboarding, plays). The service token (X-Service-Token) and the CLI-created first
+admin were approved with it.
+
+Measured after D (2026-11-17, laptop -> Neon us-east-1, real HTTP through uvicorn, keep-alive client; one
+throwaway user, deleted afterwards): `GET /auth/me` 292 ms median of 7 (1 round trip), `GET /library` 603 ms
+(2), `POST /plays/start` 605 ms (2: session + the single statement), `POST /auth/login` 2,469 ms median of 3
+(~6 round trips + bcrypt: too slow, to be folded into fewer statements later), single samples: signup 1,874 ms,
+`/library/picks` 3,679 ms (opened a new connection too), `/plays/end` 1,790 ms (sent as a beacon on page hide). The schema itself was applied on Neon in commit `ca015cd`.
 
 Legend: 🆕 new · ✏️ modified · 🗑️ removed · ✅ exists, unchanged
 

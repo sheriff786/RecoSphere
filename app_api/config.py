@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     database_url_direct: str | None = None
     pool_size: int = 5
     max_overflow: int = 5
+    # Shared secret between the web app (server side) and app_api: every route except /health needs it in
+    # X-Service-Token. Unset = every protected route answers 401 (fail closed). Network isolation: P7.
+    service_token: str | None = None
 
     @property
     def app_url(self) -> str:
