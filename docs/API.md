@@ -3,11 +3,14 @@
 Every HTTP endpoint in the system: what it does, how to call it, and which code does the work.
 
 **Keep this file in sync.** Any change that adds, changes or removes an endpoint updates this file in the
-same commit. `tests/test_api_doc.py` fails CI when an engine route or a web `/api/*` route is missing here.
+same commit. `tests/test_api_doc.py` fails CI when an engine route, a web `/api/*` route or an app_api
+route is missing here (each section is checked against its own service).
 
 ```
-browser ──► web app (Next.js, :3000)  /api/*  ── server-side fetch ──►  engine (FastAPI, :8000)
+browser ──► web app (Next.js, :3000)  /api/*  ── server-side fetch ──►  engine  (FastAPI, :8000)   ML serving
             pages render on the server             lib/engine.ts            Swagger: /docs, /redoc
+                                                                    ──►  app_api (FastAPI, :8100)   user data on Postgres
+                                                                         (P1, being built: docs/platform/P1_ROADMAP.md)
 ```
 
 - **The browser never calls the engine.** It talks to the web app only. The web app calls the engine from
@@ -316,10 +319,30 @@ Admins only (email listed in `ADMIN_EMAILS`), else `403 {"error": "forbidden"}`.
 `/admin/summary` and `/admin/rollback` with `X-Admin-Token: ENGINE_ADMIN_TOKEN` when set. Rollback errors
 → `500 {"error": ...}`.
 
+## 3. App API (`app_api/`, FastAPI + SQLAlchemy)
+
+User-owned data on Postgres (Neon): accounts, sessions, library, plays, feedback, admin audit. Classic ORM
+layers: `routers/` → `services/` → `models/` (SQLAlchemy) → `db/` (engine, pool); `schemas/` = Pydantic.
+Tables: `DB_SCHEMA.md`. Plan: `docs/platform/P1_ROADMAP.md` (phase A built: connection, models, Alembic,
+`/health`; the other routers arrive in phases B-G). Run: `make app-api` (port 8100), Swagger on `/docs`.
+
+| Method | Path | Purpose | Router |
+|---|---|---|---|
+| GET | `/health` | database reachable? migration revision | `routers/health.py` |
+
+### GET `/health`
+Runs `SELECT 1` on a pooled connection and reads `alembic_version`.
+Response: `{"status": "ok", "database": "ok", "schema_revision": "0001_baseline", "db_roundtrip_ms": <float>}`
+(`schema_revision` is `null` on a database that was never migrated or stamped). Database unreachable
+(Neon suspended for too long, wrong credentials): `503 {"status": "error", "database": "<driver error>"}`.
+`db_roundtrip_ms` = the first statement of a request: `BEGIN` + `SELECT 1`, two round trips. Measured
+2026-11-17 from the laptop to Neon us-east-1 with a warm pool: 529-542 ms (one round trip is about 266 ms).
+
 ## Change log
 | Date | Change |
 |---|---|
 | 2026-11-15 | First version: 15 engine endpoints, 9 web API routes. |
+| 2026-11-17 | P1 phase A: new service app_api (section 3) with `GET /health`. |
 | 2026-11-15 | P0.5 item 3: new `GET /users/{user_id}/fresh` ("Fresh on RecoSphere" row). |
 | 2026-11-15 | P0.5 item 2: `/explain` gets `item_type`, `in_top10`, reason `share` + `strength`; web `/api/admin/explain`. |
 | 2026-11-15 | P0.5 item 1: `item_type` filter on `/recommend`, `/catalog/popular`, `/catalog/search`, `/catalog/similar`, `/users/{id}/history`; `item_type` in cards and `/health`. |

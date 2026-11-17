@@ -35,6 +35,7 @@ Real results and every incident: `REPORT.md`. A/B method: `docs/AB_TESTING.md`. 
 | `pipeline/` | `run.py` steps, `gate.py` (bootstrap gate, promote, rollback), `replay.py`, `config.yaml` |
 | `serve/` | engine: `app.py` routes, `recommender.py`, `feature_store.py`, `experiments.py`, `metrics.py`, `product.py` (app API), `parity_check.py` |
 | `ab/` | simulator, stats (SRM, CUPED, power, peeking, interleaving), analyzer |
+| `app_api/` | user data on Postgres (P1): `db/` (engine, pool), `models/` (SQLAlchemy), `schemas/`, `services/`, `routers/`, `migrations/` (Alembic) |
 | `web/` | Next.js 15 app: auth (SQLite now), onboarding, rows, "Why this?" (SHAP), stream player, admin |
 | `infra/compose/`, `infra/monitoring/`, `infra/airflow/` | docker-compose, Prometheus/Grafana/alerts, Airflow DAG (everything that deploys) |
 | `.github/workflows/ci.yml`, `scripts/` | CI, smoke test |
@@ -52,7 +53,7 @@ python -m data.item_types --write                     # game/accessory/other per
 cd web; npm run dev                                   # app on :3000 (needs .env.local from .env.example)
 bash scripts/ci_smoke.sh                              # whole system on synthetic data (WSL / Git Bash)
 make up / up-all / down / config / help               # Docker stack (Git Bash); config: .env from .env.example
-make db-migrate / db-status / db-check   # app DB (Neon) migrations + schema rules; URLs in web/.env.local
+make app-api / db-upgrade / db-current / db-drift   # app_api on :8100; Alembic on the app DB; URLs in app_api/.env
 make e2e            # Playwright vs the running stack (no rollback)   make e2e-synthetic   # throwaway stack, = CI job e2e
 ```
 
@@ -71,14 +72,16 @@ make e2e            # Playwright vs the running stack (no rollback)   make e2e-s
 - **Item types are a serving filter, not a feature:** the model still ranks accessories (it learned Amazon
   purchases); the app asks for `item_type=game` everywhere (`web/lib/engine.ts` defaults). Never add item_type
   to the ranker without retraining + the gate. Rules + audit: `data/item_types.py`.
-- **App DB (DB_SCHEMA.md):** Neon is the main DB. Migrations are forward-only files in `web/db/migrations`
-  (never edit an applied one; the runner refuses a changed checksum); run them on the DIRECT host, the app uses
-  the `-pooler` host. The Neon URL lives only in `web/.env.local`; CI uses a Postgres 16 container (job `db`).
+- **App DB (DB_SCHEMA.md, P1_ROADMAP.md):** Neon is the main DB. Since P1 phase A the SQLAlchemy models in
+  `app_api/models` are the schema: change a model -> `alembic revision --autogenerate` -> review -> `make db-upgrade`.
+  Never edit tables by hand; `web/db/migrate.mjs` is frozen (Neon is stamped `0001_baseline`). Alembic uses the
+  DIRECT host, the app the `-pooler` host; URLs only in `app_api/.env` / `web/.env.local`; CI uses Postgres 16.
+  Pool: no pre-ping (it costs a round trip per request), `pool_recycle=240`; `prepare_threshold=None` for PgBouncer.
 - **API doc:** any change that adds, changes or removes an engine route or a web `/api/*` route updates
   `docs/API.md` (table row + section + change log) in the same commit. `tests/test_api_doc.py` enforces it.
 - **Web:** the browser never calls the engine directly; logout navigates client-side (a server redirect
   sent users to `localhost` and lost the cookie).
-- **.gitignore:** the root has `lib/` (Python template), so `!web/lib/` must stay. `data/` FILES are
+- **.gitignore:** the root has `lib/` (Python template), so `!web/lib/` must stay. Same for `models/` (trained artifacts): `!app_api/models/` (SQLAlchemy code) must stay; check `git status` lists new source folders before committing. `data/` FILES are
   ignored, `data/*.py` are not.
 - **E2E:** run the app bound to `0.0.0.0` (as in Docker). Bound to `127.0.0.1`, Next rewrites it to `localhost` in
   redirects (another origin). Rollback in e2e only with `E2E_ALLOW_ROLLBACK=1` on a throwaway stack.

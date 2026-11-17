@@ -1,0 +1,8 @@
+# app_api (P1): user data on Postgres through SQLAlchemy. Small on purpose: no torch / FAISS / LightGBM.
+fastapi>=0.110
+uvicorn>=0.29
+sqlalchemy>=2.0,<3
+alembic>=1.13
+psycopg[binary]>=3.2
+pydantic-settings>=2.4
+certifi>=2024.2.2   # CA bundle for sslmode=verify-full (libpq's "system" store is not found on Windows)

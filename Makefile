@@ -10,7 +10,7 @@ PROFILES := obs
 PY       ?= python
 
 .DEFAULT_GOAL := help
-.PHONY: help up up-all down logs ps test smoke config e2e e2e-synthetic db-migrate db-status db-check
+.PHONY: help up up-all down logs ps test smoke config e2e e2e-synthetic db-migrate db-status db-check app-api db-upgrade db-current db-drift
 
 help:            ## list the targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/'
@@ -47,7 +47,21 @@ e2e:             ## browser e2e (Playwright) against the running stack: make up 
 e2e-synthetic:   ## browser e2e on a throwaway synthetic stack, incl. roll back (what CI runs; no Docker)
 	bash scripts/e2e_stack.sh
 
-# App database (DB_SCHEMA.md). URLs come from web/.env.local (git-ignored): DATABASE_URL_DIRECT for these.
+# app_api (P1, docs/platform/P1_ROADMAP.md). URLs from app_api/.env (git-ignored). Schema changes: models +
+# Alembic (`$(PY) -m alembic revision --autogenerate -m "..."`), never by hand.
+app-api:         ## run app_api (user data on Postgres) on :8100
+	$(PY) -m uvicorn app_api.main:app --host 127.0.0.1 --port 8100
+
+db-upgrade:      ## apply pending Alembic migrations to the app database
+	$(PY) -m alembic upgrade head
+
+db-current:      ## show the app database's Alembic revision
+	$(PY) -m alembic current
+
+db-drift:        ## fail if the models and the app database differ (Alembic autogenerate finds changes)
+	$(PY) -m alembic check
+
+# Legacy Node runner (frozen since P1 phase A; removed in phase H). URLs from web/.env.local.
 db-migrate:      ## apply pending SQL migrations (web/db/migrations) to the app database
 	cd web && node --env-file=.env.local db/migrate.mjs
 

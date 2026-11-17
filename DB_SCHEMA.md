@@ -1,5 +1,10 @@
 # Database schema (P1): Postgres for RecoSphere Play
 
+> **Since P1 phase A (2026-11-17)** the schema is owned by the SQLAlchemy models in `app_api/models/` and
+> changed through Alembic (`app_api/migrations/`). `001_init.sql` below is the baseline revision
+> (`0001_baseline`); `tests/app_api/test_models.py` proves the models build exactly this schema. Plan:
+> `docs/platform/P1_ROADMAP.md`.
+
 Migration: `web/db/migrations/001_init.sql`. Target: Postgres 16+ (Neon in the cloud, the `postgres`
 service in `infra/compose` locally; same SQL for both).
 

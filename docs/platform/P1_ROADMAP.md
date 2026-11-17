@@ -1,8 +1,7 @@
 # P1 roadmap: app data on Postgres (Neon) through a Python ORM
 
-Status: **proposed, 2026-11-15**. Built so far: the schema only (`DB_SCHEMA.md`, `web/db/migrations/001_init.sql`,
-applied on Neon in commit `ca015cd`). Open decisions: see [Decisions](#decisions); the plan assumes the
-proposed answers.
+Status: decisions approved 2026-11-17. **Phase A done** (connection, models, Alembic baseline, `/health`);
+B-H open. The schema itself was applied on Neon in commit `ca015cd`.
 
 Legend: 🆕 new · ✏️ modified · 🗑️ removed · ✅ exists, unchanged
 
@@ -182,9 +181,13 @@ One phase = one commit, CI green, and a check with the owner before the next one
   (`DATABASE_URL_DIRECT`). Both only in git-ignored env files; CI uses its own Postgres and never sees Neon.
 - **PgBouncer**: psycopg's automatic prepared statements are switched off (`prepare_threshold=None`), else
   queries through the pooler fail.
-- **Latency budget**: Neon us-east-1 costs about 264 ms per query from the laptop (measured 2026-11-15).
-  At most 2 sequential round trips per request (eager-load relationships with `selectinload`/joins, no
-  N+1 queries); every phase measures request time before and after.
+- **Latency budget**: Neon us-east-1 costs about 266 ms per round trip from the laptop (measured 2026-11-15
+  and 2026-11-17). At most 2 sequential round trips per request (eager-load relationships with
+  `selectinload`/joins, no N+1 queries); every phase measures request time before and after.
+  Measured in phase A: `pool_pre_ping` added a round trip to every request (first statement 813 ms with it,
+  532 ms without), so it is off and `pool_recycle=240` covers Neon's 5-minute suspend instead. A transaction's
+  `BEGIN` is the second round trip of every request: read-only endpoints can drop it with an autocommit
+  session (decide in phase B).
 - **Every endpoint** is documented in `docs/API.md` in the same commit (the doc test will cover app_api).
 
 ## Decisions

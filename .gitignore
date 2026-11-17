@@ -229,6 +229,8 @@ __marimo__/
 !/data/*.py
 # (data FILES are regenerable; the data/*.py ingestion code IS committed)
 models/
+!app_api/models/
+# (models/ = trained model artifacts; app_api/models/ is SQLAlchemy source code and IS committed)
 *.pt
 *.npy
 *.index
