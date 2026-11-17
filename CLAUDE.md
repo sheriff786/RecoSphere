@@ -36,7 +36,7 @@ Real results and every incident: `REPORT.md`. A/B method: `docs/AB_TESTING.md`. 
 | `serve/` | engine: `app.py` routes, `recommender.py`, `feature_store.py`, `experiments.py`, `metrics.py`, `product.py` (app API), `parity_check.py` |
 | `ab/` | simulator, stats (SRM, CUPED, power, peeking, interleaving), analyzer |
 | `app_api/` | user data on Postgres (P1): `db/` (engine, pool), `models/` (SQLAlchemy), `schemas/`, `services/`, `routers/`, `migrations/` (Alembic) |
-| `web/` | Next.js 15 app: auth (SQLite now), onboarding, rows, "Why this?" (SHAP), stream player, admin |
+| `web/` | Next.js 15 app: auth + library + plays via app_api (`lib/api.ts`), onboarding, rows, "Why this?" (SHAP), stream player, admin |
 | `infra/compose/`, `infra/monitoring/`, `infra/airflow/` | docker-compose, Prometheus/Grafana/alerts, Airflow DAG (everything that deploys) |
 | `.github/workflows/ci.yml`, `scripts/` | CI, smoke test |
 | `docs/platform/` | productionization architecture + phased plan (P0–P10) |
@@ -56,7 +56,8 @@ make up / up-all / down / config / help               # Docker stack (Git Bash);
 make app-api / db-upgrade / db-current / db-drift   # app_api on :8100; Alembic on the app DB; URLs in app_api/.env
 make load-catalog   # gold catalog -> Neon `games` (idempotent; run after new data, after `python -m data.item_types --write`)
 ADMIN_PASSWORD=... python -m app_api.cli create-admin --email <email>   # first admin (or promote an account)
-make e2e            # Playwright vs the running stack (no rollback)   make e2e-synthetic   # throwaway stack, = CI job e2e
+make e2e            # Playwright vs the running stack (no rollback)
+E2E_PG_URL=<server url> make e2e-synthetic   # throwaway stack + throwaway DB (dropped), = CI job e2e
 ```
 
 ## Rules learned the hard way (do not regress)
@@ -84,7 +85,10 @@ make e2e            # Playwright vs the running stack (no rollback)   make e2e-s
   Every app_api route except /health needs X-Service-Token (SERVICE_TOKEN in app_api/.env; fails closed when unset).
 - **API doc:** any change that adds, changes or removes an engine route or a web `/api/*` route updates
   `docs/API.md` (table row + section + change log) in the same commit. `tests/test_api_doc.py` enforces it.
-- **Web:** the browser never calls the engine directly; logout navigates client-side (a server redirect
+- **Web:** the browser never calls the engine or app_api directly; the cookie (JWT) carries only `sid`, liveness is
+  app_api `/auth/me` (logout revokes). e2e and tests never write to the real Neon database (throwaway DBs / rollback);
+  a real-stack run that creates users must delete them afterwards (`email like 'e2e-%@example.test'`).
+- **Web (old rule):** the browser never calls the engine directly; logout navigates client-side (a server redirect
   sent users to `localhost` and lost the cookie).
 - **.gitignore:** the root has `lib/` (Python template), so `!web/lib/` must stay. Same for `models/` (trained artifacts): `!app_api/models/` (SQLAlchemy code) must stay; check `git status` lists new source folders before committing. `data/` FILES are
   ignored, `data/*.py` are not.

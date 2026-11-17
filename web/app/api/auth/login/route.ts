@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
-import { checkPassword } from "@/lib/db";
-import { setSessionCookie } from "@/lib/auth";
+import { api, ApiError } from "@/lib/api";
+import { clientUserAgent, setSessionCookie } from "@/lib/auth";
 
 export async function POST(req: Request) {
   const { email, password } = await req.json().catch(() => ({}));
-  const u = email && password ? checkPassword(email, password) : undefined;
-  if (!u) return NextResponse.json({ error: "Wrong email or password" }, { status: 401 });
-  await setSessionCookie(u.id);
-  return NextResponse.json({ ok: true, next: u.onboarded ? "/" : "/onboarding" });
+  if (!email || !password) return NextResponse.json({ error: "Wrong email or password" }, { status: 401 });
+  try {
+    const s = await api.login(String(email), String(password), await clientUserAgent());
+    await setSessionCookie(s.session_id);
+    return NextResponse.json({ ok: true, next: s.needs_onboarding ? "/onboarding" : "/" });
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 401 || e.status === 422)) {
+      return NextResponse.json({ error: "Wrong email or password" }, { status: 401 });
+    }
+    throw e;
+  }
 }

@@ -6,31 +6,36 @@ import type { Game } from "@/lib/engine";
 function hue(s: string) { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % 360; }
 
 // Simulated cloud-game stream: a procedurally animated "game" on a canvas + a streaming HUD.
-// The real work: POST /api/play on start (-> engine /event, so the feed changes) and on end (session length).
+// The real work: POST /api/play on start (Postgres play + library via app_api; engine /event, so the feed changes)
+// and on end (session length).
 export default function Player({ game, rid }: { game: Game; rid?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const playId = useRef<number | null>(null);
+  const live = useRef<string | null>(null);          // client_event_id of the running stream, null when none
   const started = useRef(Date.now());
   const [secs, setSecs] = useState(0);
   const [hud, setHud] = useState({ ping: 18, fps: 60, mbps: 24.0 });
   const [status, setStatus] = useState<"connecting" | "live" | "ended">("connecting");
   const [firstTime, setFirstTime] = useState<boolean | null>(null);
 
-  // ONE start request per game, even when React runs this effect twice (StrictMode in dev: mount, cleanup,
-  // mount). A second POST would log a second play and make the engine answer "played before".
-  const startReq = useRef<{ item: string; done: Promise<{ play_id: number; first_time: boolean }> } | null>(null);
+  // ONE start per game, even when React runs this effect twice (StrictMode in dev: mount, cleanup, mount).
+  // The start carries a client_event_id made here: if it is ever sent twice, app_api stores one play (P1).
+  const startReq = useRef<{ item: string; cid: string; done: Promise<{ play_id: string; first_time: boolean }> } | null>(null);
 
   useEffect(() => {
     let alive = true;
     if (startReq.current?.item !== game.item_id) {
-      startReq.current = { item: game.item_id, done: fetch("/api/play", { method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ item_id: game.item_id, rid }) }).then((r) => r.json()) };
+      const cid = crypto.randomUUID();
+      startReq.current = { item: game.item_id, cid, done: fetch("/api/play", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ item_id: game.item_id, rid, client_event_id: cid, surface: rid ? "play:recommended" : "play:direct" }) })
+        .then((r) => r.json()) };
     }
-    startReq.current.done.then((d) => { if (!alive) return; playId.current = d.play_id; setFirstTime(d.first_time); setStatus("live"); started.current = Date.now(); });
+    const req = startReq.current;
+    req.done.then((d) => { if (!alive) return; live.current = req.cid; setFirstTime(d.first_time); setStatus("live"); started.current = Date.now(); });
     const end = () => {
-      if (playId.current == null) return;
-      navigator.sendBeacon("/api/play", new Blob([JSON.stringify({ end: true, play_id: playId.current, seconds: (Date.now() - started.current) / 1000 })], { type: "application/json" }));
-      playId.current = null;
+      if (live.current == null) return;
+      navigator.sendBeacon("/api/play", new Blob([JSON.stringify({ end: true, client_event_id: live.current,
+        seconds: (Date.now() - started.current) / 1000 })], { type: "application/json" }));
+      live.current = null;
     };
     window.addEventListener("pagehide", end);
     return () => { alive = false; end(); window.removeEventListener("pagehide", end); };

@@ -44,7 +44,7 @@ smoke:           ## end-to-end smoke test on synthetic data (pipeline -> gate ->
 e2e:             ## browser e2e (Playwright) against the running stack: make up first. Never rolls back.
 	cd web && npx playwright test
 
-e2e-synthetic:   ## browser e2e on a throwaway synthetic stack, incl. roll back (what CI runs; no Docker)
+e2e-synthetic:   ## browser e2e on a throwaway synthetic stack + throwaway DB on E2E_PG_URL (what CI runs; no Docker)
 	bash scripts/e2e_stack.sh
 
 # app_api (P1, docs/platform/P1_ROADMAP.md). URLs from app_api/.env (git-ignored). Schema changes: models +

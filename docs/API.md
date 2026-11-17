@@ -254,30 +254,33 @@ No previous model → error (`RuntimeError: nothing to roll back to`).
 
 ## 2. Web app API (`web/app/api/*`, Next.js route handlers)
 
-Called by the browser with the session cookie (`rs_session`, httpOnly JWT signed with `AUTH_SECRET`).
-`web/middleware.ts` sends logged-out page requests to `/login` and answers logged-out `/api/*` calls (except
-`/api/auth/*`) with `401 {"error": "unauthorized"}`. Accounts live in the app DB (`web/lib/db.ts`, SQLite now,
-Postgres in P1).
+Called by the browser with the session cookie (`rs_session`, httpOnly JWT signed with `AUTH_SECRET`, carrying
+`sid` = the app_api login session id). `web/middleware.ts` (edge, no database) only checks the signature: it sends
+logged-out page requests to `/login` and answers logged-out `/api/*` calls (except `/api/auth/*`) with
+`401 {"error": "unauthorized"}`. Whether the session is still alive is checked on the server through app_api
+`GET /auth/me` (once per request, `web/lib/auth.ts`). User data lives in Postgres behind app_api (section 3,
+client `web/lib/api.ts`); cookies from before P1 (`uid` claim) are treated as logged out.
 
-| Method | Path | Purpose | Engine calls |
+| Method | Path | Purpose | Calls |
 |---|---|---|---|
-| POST | `/api/auth/signup` | create an account, sign in | – |
-| POST | `/api/auth/login` | sign in | – |
-| POST | `/api/auth/logout` | sign out | – |
-| POST | `/api/auth/demo` | sign in as a real dataset player | `GET /users/demo?k=50` |
-| POST | `/api/onboarding` | save the first picks (cold start) | `POST /event` per pick |
-| POST | `/api/play` | start / end a play session | `POST /event`, `POST /feedback` (play) |
+| POST | `/api/auth/signup` | create an account, sign in | app_api `POST /auth/signup` |
+| POST | `/api/auth/login` | sign in | app_api `POST /auth/login` |
+| POST | `/api/auth/logout` | sign out (revokes the session) | app_api `POST /auth/logout` |
+| POST | `/api/auth/demo` | sign in as a real dataset player | engine `GET /users/demo?k=50`, app_api `POST /auth/demo` |
+| POST | `/api/onboarding` | save the first picks (cold start) | app_api `POST /library/picks`, engine `POST /event` per pick |
+| POST | `/api/play` | start / end a play session | app_api `POST /plays/start` / `end`, engine `POST /event`, `POST /feedback` (play) |
 | POST | `/api/feedback` | click beacon from a recommendation tile | `POST /feedback` |
 | GET | `/api/admin/summary` | admin dashboard data | `GET /admin/summary` |
 | GET | `/api/admin/explain` | admin "Why-this inspector": raw explanation | `GET /explain/{user_id}?items=&item_type=game` |
 | POST | `/api/admin/rollback` | admin "Roll back" button | `POST /admin/rollback` |
 
 The pages themselves (home, game, search, library, onboarding) call the engine while rendering on the server:
-`/recommend?meta=true`, `/explain`, `/users/{id}/history`, `/users/{id}/fresh`, `/catalog/*`.
+`/recommend?meta=true`, `/explain`, `/users/{id}/history`, `/users/{id}/fresh`, `/catalog/*`; the library page
+reads app_api `GET /library` + `/library/stats` (cards from engine `/catalog/items`).
 
 ### POST `/api/auth/signup`
-Body `{"email", "password", "name"?}`. Email must look valid, password 8+ characters. Creates an `app`
-user (bcrypt hash, engine id `app:<id>`), sets the session cookie.
+Body `{"email", "password", "name"?}`. Email must look valid, password 8+ characters (app_api also enforces
+at most 72 bytes). app_api creates the user (engine id `app:<uuid>`) and a login session; the cookie gets its id.
 → `{"ok": true, "next": "/onboarding"}`; `400` invalid input; `409` email exists.
 
 ### POST `/api/auth/login`
@@ -285,23 +288,27 @@ Body `{"email", "password"}`. → `{"ok": true, "next": "/" | "/onboarding"}` (o
 picks are saved); `401 {"error": "Wrong email or password"}`.
 
 ### POST `/api/auth/logout`
-Clears the cookie, returns `{"ok": true}`. The browser navigates to `/login` itself (a server redirect once
-sent users to another origin and lost the cookie; see the comment in the route).
+Revokes the login session in app_api (a copy of the old cookie no longer works; e2e checks this), clears the
+cookie, returns `{"ok": true}`. The browser navigates to `/login` itself (a server redirect once sent users to
+another origin and lost the cookie; see the comment in the route).
 
 ### POST `/api/auth/demo`
-Body `{"user_id"}`. Accepted only if the engine offers that id in `/users/demo?k=50`; creates (once) a
-`dataset` user mapped to it and signs in. → `{"ok": true, "next": "/"}`; `400 {"error": "unknown player"}`.
+Body `{"user_id"}`. Accepted only if the engine offers that id in `/users/demo?k=50`; app_api creates (once) a
+demo user mapped to it and a login session. → `{"ok": true, "next": "/"}`; `400 {"error": "unknown player"}`.
 
 ### POST `/api/onboarding`
-Body `{"item_ids": [...]}`, at least 3 (max 20 used). Each pick → engine `POST /event`, so the first feed is
-already personalized. Marks the user onboarded. → `{"ok": true}`; `400` fewer than 3; `401`.
+Body `{"item_ids": [...]}`, at least 3 (max 20 used). Saved through app_api (`library`, source `onboarding`,
+the user onboarded; `400` if one is not an active game), then each pick → engine `POST /event`, so the first feed
+is already personalized. → `{"ok": true}`; `400` fewer than 3 or not games; `401`.
 
 ### POST `/api/play`
-Start: body `{"item_id", "rid"?}` → engine `POST /event` (history, feed changes at once) and, when the play
-came from a recommendation (`rid` = its `request_id`), engine `POST /feedback` with `action: "play"`; stores
-a play session. → `{"ok": true, "play_id", "first_time": bool}` (`first_time` = the engine's `recorded`).
-End: body `{"end": true, "play_id", "seconds"}` (sent as a beacon on page hide) stores the session length.
-`401` when logged out.
+Start: body `{"item_id", "client_event_id", "rid"?, "surface"?}`. `client_event_id` is a uuid made by the browser
+(`components/Player.tsx`); a repeated start stores one play. app_api stores the play + library row (one statement),
+then engine `POST /event` (history, the feed changes at once) and, when the play came from a recommendation
+(`rid` = its `request_id`), engine `POST /feedback` with `action: "play"`.
+→ `{"ok": true, "play_id", "first_time": bool}` (`first_time` from Postgres: the game was not in the library).
+End: body `{"end": true, "client_event_id", "seconds"}` (sent as a beacon on page hide) stores the length.
+`400` without a uuid `client_event_id` or for a non-game, `404` unknown item, `401` when logged out.
 
 ### POST `/api/feedback`
 Body `{"request_id", "item_id", "action"?}` (`play`, anything else counts as `click`). Forwards to engine
@@ -315,7 +322,7 @@ including the raw SHAP `weight`, `rank`, `n_candidates` and `score` that the use
 hides (users only see strength bars). Engine errors → `502 {"error": ...}`.
 
 ### GET `/api/admin/summary` · POST `/api/admin/rollback`
-Admins only (email listed in `ADMIN_EMAILS`), else `403 {"error": "forbidden"}`. Forward to the engine's
+Admins only (`users.role = 'admin'` in Postgres), else `403 {"error": "forbidden"}`. Forward to the engine's
 `/admin/summary` and `/admin/rollback` with `X-Admin-Token: ENGINE_ADMIN_TOKEN` when set. Rollback errors
 → `500 {"error": ...}`.
 
@@ -440,6 +447,7 @@ The first admin is created outside HTTP: `ADMIN_PASSWORD=... python -m app_api.c
 | 2026-11-15 | First version: 15 engine endpoints, 9 web API routes. |
 | 2026-11-17 | P1 phase A: new service app_api (section 3) with `GET /health`. |
 | 2026-11-17 | P1 phase D: app_api auth, library, plays, feedback and admin audit routes; service token + session id headers. |
+| 2026-11-17 | P1 phase E: the web routes use app_api (Postgres) instead of SQLite; cookie carries `sid`; `/api/play` needs `client_event_id`. |
 | 2026-11-15 | P0.5 item 3: new `GET /users/{user_id}/fresh` ("Fresh on RecoSphere" row). |
 | 2026-11-15 | P0.5 item 2: `/explain` gets `item_type`, `in_top10`, reason `share` + `strength`; web `/api/admin/explain`. |
 | 2026-11-15 | P0.5 item 1: `item_type` filter on `/recommend`, `/catalog/popular`, `/catalog/search`, `/catalog/similar`, `/users/{id}/history`; `item_type` in cards and `/health`. |

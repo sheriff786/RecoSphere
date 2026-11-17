@@ -55,6 +55,18 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # the app's user data lives in Postgres since P1 phase E: scripts/e2e_stack.sh creates a throwaway database
+    # on this server (Alembic + synthetic catalog + admin) and drops it at the end
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      E2E_PG_URL: postgresql://postgres:ci@127.0.0.1:5432/postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -185,5 +185,7 @@ rows are uploaded either way). Neon storage after the load: `games` 23 MB, whole
   2000-2007).
 - `description` is cut to 2,000 characters (the full text stays in gold).
 
-## Not built yet
-- The app still uses SQLite (`web/lib/db.ts`); moving it to these tables is P1 phases D-H.
+## In use (P1 phase E, 2026-11-17)
+The web app's signup, login, logout, demo login, onboarding, plays and library go through app_api into these tables
+(`users`, `sessions`, `library`, `play_sessions`); SQLite is gone. `item_feedback` and `admin_audit_log` have their
+app_api routes but no web UI yet (phase G).

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import { currentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/db";
 
 export const metadata: Metadata = {
   title: "RecoSphere Play",
@@ -14,7 +13,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en">
       <body className="text-zinc-200 antialiased">
-        <Navbar user={user ? { name: user.name, kind: user.kind, admin: isAdmin(user) } : null} />
+        <Navbar user={user ? { name: user.name, kind: user.kind, admin: user.admin } : null} />
         <main className="pb-24">{children}</main>
       </body>
     </html>

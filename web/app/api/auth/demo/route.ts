@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
-import { datasetUser } from "@/lib/db";
-import { setSessionCookie } from "@/lib/auth";
+import { api } from "@/lib/api";
+import { clientUserAgent, setSessionCookie } from "@/lib/auth";
 import { engine } from "@/lib/engine";
 
-// "Explore as a real player": sign in as one of the engine's dataset users (only ids the engine offers).
+// "Explore as a real player": sign in as one of the engine's dataset users (only ids the engine offers; app_api
+// trusts this check, see docs/API.md POST /auth/demo).
 export async function POST(req: Request) {
   const { user_id } = await req.json().catch(() => ({}));
   const offered = await engine.demoUsers(50);
   if (!offered.some((u) => u.user_id === user_id)) return NextResponse.json({ error: "unknown player" }, { status: 400 });
-  const u = datasetUser(user_id);
-  await setSessionCookie(u.id);
+  const s = await api.demo(String(user_id), await clientUserAgent());
+  await setSessionCookie(s.session_id);
   return NextResponse.json({ ok: true, next: "/" });
 }

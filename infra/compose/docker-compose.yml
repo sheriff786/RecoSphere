@@ -45,19 +45,29 @@ services:
       redis:
         condition: service_healthy
 
+  app-api:                                        # user data on Postgres (Neon); P1, docs/API.md section 3
+    build:
+      context: ../..
+      dockerfile: Dockerfile.app_api
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env (Neon -pooler url)}
+      DATABASE_URL_DIRECT: ${DATABASE_URL_DIRECT:-}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?set SERVICE_TOKEN in .env}
+    ports: ["${APP_API_PORT:-8100}:8100"]
+
   web:
     build: ../../web
     environment:
       ENGINE_URL: http://api:8000
+      APP_API_URL: http://app-api:8100
+      APP_API_TOKEN: ${SERVICE_TOKEN:?set SERVICE_TOKEN in .env}
       AUTH_SECRET: ${AUTH_SECRET:-change-me-local-dev-only-0123456789}
-      ADMIN_EMAILS: ${ADMIN_EMAILS:-admin@recosphere.dev}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
       ENGINE_ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-0}             # plain http on localhost/LAN; set 1 behind https
-    volumes:
-      - web-data:/app/data
     ports: ["${WEB_PORT:-3000}:3000"]
     depends_on:
+      app-api:
+        condition: service_healthy
       api:
         condition: service_healthy   # engine loads models for 1-2 min; before that every page would 500
 
@@ -84,5 +94,4 @@ services:
     depends_on: [prometheus]
 
 volumes:
-  web-data:
   redis-data:

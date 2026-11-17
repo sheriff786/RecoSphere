@@ -116,9 +116,20 @@ test("new user: signup -> onboarding -> personalized feed -> play changes it -> 
   await page.goto(`/game/${encodeURIComponent(played)}`);
   await expect(page.getByTestId("why-title")).toHaveText("How this game scores for you");
 
-  // sign out, sign in again: straight to the feed (already onboarded), still personalized
+  // the library is Postgres (app_api): 3 onboarding picks + the played game, with its play
+  await page.goto("/library");
+  await expect(page.getByTestId("library-stats")).toContainText("4 games · 1 plays");
+  await expect(page.getByTestId("card-title").filter({ hasText: title.slice(0, 20) }).first()).toBeVisible();
+
+  // sign out REVOKES the session: putting the old cookie back does not log you in again (a stateless JWT would)
+  const oldCookies = await page.context().cookies();
   await page.getByRole("button", { name: "Sign out" }).click();
   await atPath(page, "/login");
+  await page.context().addCookies(oldCookies);
+  await page.goto("/");
+  await atPath(page, "/login");
+
+  // sign in again: straight to the feed (already onboarded), still personalized
   await login(page, email, PASSWORD);
   await expect(page.getByTestId("engine-strip")).toContainText("source personalized");
 });

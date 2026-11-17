@@ -1,7 +1,15 @@
 # P1 roadmap: app data on Postgres (Neon) through a Python ORM
 
-Status: decisions approved 2026-11-17. **Phases A-D done** (connection, models, Alembic baseline, `/health`;
-schemas + services; the catalog in `games`; the HTTP routes, docs/API.md section 3); E-H open.
+Status: decisions approved 2026-11-17. **Phases A-E done**: the web app's accounts, sessions, onboarding, plays
+and library run on app_api + Neon (SQLite code removed); F-H open.
+
+Phase E (2026-11-17): `web/lib/api.ts` (app_api client), cookie JWT carries `sid`, `/auth/me` once per request;
+signup/login/logout/demo/onboarding/play/library through app_api; `web/lib/db.ts` deleted. e2e runs every time on
+a THROWAWAY database (`scripts/e2e_db.py`: CI's Postgres service, or Neon's server from the laptop; dropped at the
+end). Verified: synthetic e2e 6/6 (incl. "a revoked session's old cookie no longer logs in" and the library from
+Postgres); real stack (real model, real Neon) 4/4 non-admin tests, the test users deleted afterwards. Compose:
+new `app-api` service + `Dockerfile.app_api` (config validated; the images were NOT built: Docker is not running
+on the laptop).
 
 **Re-cut on 2026-11-17 (approved):** D and E as first planned were coupled: a user created in Neon cannot onboard
 or play while those still live in SQLite (integer user ids, foreign keys). So **D = all app_api HTTP routes** (auth,
