@@ -80,3 +80,19 @@ def test_admin_reload_with_token(client):
     c, mgr = client(token="secret")
     assert c.post("/admin/reload", headers={"X-Admin-Token": "secret"}).status_code == 200
     assert mgr.reload_calls == [("admin request", False)]
+
+
+def test_replay_history_route(client):
+    """P1 phase F: POST /users/{id}/history replays oldest-first through add_event; GET on the same path still works."""
+    from tests.test_serving import _fake_engine
+    from serve.recommender import Recommender
+    c, mgr = client()
+    eng = _fake_engine()
+    mgr.current.add_events = Recommender.add_events.__get__(eng)
+    body = {"items": [{"item_id": "I1"}, {"item_id": "I2"}, {"item_id": "nope"}]}
+    assert c.post("/users/app:x/history", json=body).json() == \
+        {"user_id": "app:x", "recorded": 2, "already_seen": 0, "unknown": ["nope"]}
+    assert c.post("/users/app:x/history", json=body).json()["recorded"] == 0
+    assert eng.store.get("app:x")[1]["hist"] == [1, 2]
+    assert c.post("/users/app:x/history", json={"items": [{"item_id": "I1"}] * 501}).status_code == 422
+    assert c.get("/users/app:x/history", params={"k": 1}).status_code == 200

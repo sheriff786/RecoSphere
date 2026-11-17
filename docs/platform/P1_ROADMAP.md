@@ -1,7 +1,18 @@
 # P1 roadmap: app data on Postgres (Neon) through a Python ORM
 
-Status: decisions approved 2026-11-17. **Phases A-E done**: the web app's accounts, sessions, onboarding, plays
-and library run on app_api + Neon (SQLite code removed); F-H open.
+Status: decisions approved 2026-11-17. **Phases A-F done**: the web app's accounts, sessions, onboarding, plays
+and library run on app_api + Neon (SQLite code removed), and an engine restart no longer forgets app users; G-H open.
+
+Phase F (2026-11-17): Postgres `library` is the source of truth, the engine's history is a cache of it. New engine
+route `POST /users/{user_id}/history` (bulk `/event`, oldest first, same dedup: `Recommender.add_events`); the web
+replays the library on login, demo login, and on the home page when an app user has no engine history
+(`web/lib/history.ts`; a failed replay never fails a login or a page). Found on the way: (1) Next.js memoizes
+identical GET fetches within one render, so re-fetching the feed after the replay returned the old one; the home
+page redirects instead. (2) Onboarding picks are saved in one statement, so they shared `added_at` and came back
+in item_id order; each pick now gets +1 µs to keep the pick order. Tests: replay = the same `/event` calls one by
+one (unit), the route (router test), smoke checks, and an e2e that restarts the engine between two Playwright
+phases, checks the engine really forgot both users, then checks the home-page path (user keeps the cookie) and
+the login path (checked on the engine before any page loads, so the home page cannot hide it).
 
 Phase E (2026-11-17): `web/lib/api.ts` (app_api client), cookie JWT carries `sid`, `/auth/me` once per request;
 signup/login/logout/demo/onboarding/play/library through app_api; `web/lib/db.ts` deleted. e2e runs every time on

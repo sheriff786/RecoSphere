@@ -98,6 +98,9 @@ E2E_PG_URL=<server url> make e2e-synthetic   # throwaway stack + throwaway DB (d
   (torch segfault / CUDA OOM). `make down` first. Rebuild one service with `up --no-deps <svc>` or compose
   recreates the engine too (1-2 min model load).
 - Kill Next with `next-server`, not `next start` (the process name differs), or old code keeps serving.
+- **Engine history is a cache of Postgres `library`** (P1 phase F): the web replays it (`web/lib/history.ts`,
+  engine `POST /users/{id}/history`). In a server component, Next memoizes identical GET fetches per render:
+  re-fetching after a write returns the OLD answer; redirect (new request) instead.
 
 ## Next
 P0 (foundation) is done. See `docs/HANDOFF.md` → Phase **P1 (Postgres)**. Target layout: `docs/platform/REPO_STRUCTURE.md`.

@@ -52,6 +52,14 @@ def test_recent_is_most_recent_first_and_games_only(db, statements):
     assert "A-PAD" in [r.item_id for r in lib.recent(db, uid, games_only=False)]
 
 
+def test_recent_keeps_the_pick_order(db):
+    """P1 phase F: the engine replay reads the library newest first and reverses it; picks saved in one statement
+    must come back in pick order (last pick = newest), not item_id order, or a restart reorders the history."""
+    uid = new_user(db)
+    lib.add_picks(db, uid, PicksIn(item_ids=["G-ZELDA", "G-MARIO", "G-POKEMON"]))
+    assert [r.item_id for r in lib.recent(db, uid)] == ["G-POKEMON", "G-MARIO", "G-ZELDA"]
+
+
 def test_stats(db):
     uid = new_user(db)
     assert lib.stats(db, uid).model_dump() == {"games": 0, "plays": 0, "seconds_played": 0}

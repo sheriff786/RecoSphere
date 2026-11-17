@@ -46,6 +46,16 @@ for it in pop[:3]:   # brand-new app user: 3 plays -> personalized feed
     urllib.request.urlopen(urllib.request.Request(B + "/event", data=json.dumps({"user_id": "app:ci", "item_id": it["item_id"]}).encode(),
                                                   headers={"content-type": "application/json"}))
 assert g("/recommend/app:ci?k=5&meta=true")["source"] == "personalized"
+# P1 phase F: bulk replay (what the web does after an engine restart) = the same events one by one
+def post(path, body):
+    return json.loads(urllib.request.urlopen(urllib.request.Request(B + path, data=json.dumps(body).encode(),
+                                                                    headers={"content-type": "application/json"})).read())
+items = [{"item_id": it["item_id"]} for it in pop[:3]] + [{"item_id": "NOT-AN-ITEM"}]
+r = post("/users/app:ci-replay/history", {"items": items})
+assert r["recorded"] == 3 and r["unknown"] == ["NOT-AN-ITEM"], r
+assert post("/users/app:ci-replay/history", {"items": items})["recorded"] == 0      # replay twice: nothing new
+assert g("/recommend/app:ci-replay?k=5&meta=true")["source"] == "personalized"
+assert [x["item_id"] for x in g("/users/app:ci-replay/history?k=5")["items"]] ==        [x["item_id"] for x in g("/users/app:ci/history?k=5")["items"]]
 # P0.5 item types: synthetic catalog has controllers; the game filter must drop every one of them
 assert g("/health")["item_types"]["accessory"] > 0
 assert all(x["item_type"] == "game" for x in g("/recommend/app:ci?k=20&item_type=game")["items"])

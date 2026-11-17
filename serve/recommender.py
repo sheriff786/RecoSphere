@@ -234,3 +234,19 @@ class Recommender:
         uid, added = self.store.add_event(user_id, iid, ts, float(rating if rating is not None else 5.0),
                                           int(self.ctx.store[iid]), self.hist_len)
         return {"user_id": user_id, "uid": uid, "item_id": item_id, "recorded": added}
+
+    def add_events(self, user_id: str, items: list[tuple[str, int | None, float | None]]) -> dict:
+        """Replay many interactions in order (oldest first), e.g. the app's library after an engine restart (P1
+        phase F). Each one goes through add_event, so dedup, hist_len trimming and counts are exactly /event's.
+        Unknown item ids are skipped and reported, not an error (the catalog may have changed since)."""
+        recorded = already = 0
+        unknown: list[str] = []
+        for item_id, ts, rating in items:
+            if item_id not in self.iid_of:
+                unknown.append(item_id)
+                continue
+            if self.add_event(user_id, item_id, ts, rating)["recorded"]:
+                recorded += 1
+            else:
+                already += 1
+        return {"user_id": user_id, "recorded": recorded, "already_seen": already, "unknown": unknown}

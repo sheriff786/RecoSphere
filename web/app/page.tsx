@@ -5,6 +5,7 @@ import { engine, type Game } from "@/lib/engine";
 import Cover from "@/components/Cover";
 import Row from "@/components/Row";
 import WhyThis from "@/components/WhyThis";
+import { replayLibrarySafe } from "@/lib/history";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,14 @@ export default async function Home() {
   const [recs, history, trending, fresh] = await Promise.all([
     engine.recommend(uid, 20), engine.history(uid, 12), engine.popular(20), engine.fresh(uid, 20),
   ]);
+  // An onboarded app user with no engine history: the engine restarted (its history is a cache). Put the saved
+  // library back from Postgres and render again (P1 phase F); costs nothing on the normal path. A redirect, not a
+  // second fetch here: Next memoizes identical GET fetches within one render, so they would return the old feed.
+  // No loop: on the next request the history is there, or the replay records nothing new (dedup).
+  if (user.kind === "app" && history.length === 0) {
+    const r = await replayLibrarySafe(user);
+    if (r && r.recorded > 0) redirect("/");
+  }
   const last = history[0];
   const [why, because] = await Promise.all([
     engine.explain(uid, recs.items.map((g) => g.item_id)).catch(() => null),

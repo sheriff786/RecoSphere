@@ -42,6 +42,7 @@ browser ──► web app (Next.js, :3000)  /api/*  ── server-side fetch ─
 | GET | `/catalog/similar/{item_id}` | nearest games in embedding space | `routers/catalog.py` |
 | GET | `/users/demo` | real dataset players to explore as | `routers/catalog.py` |
 | GET | `/users/{user_id}/history` | a user's recent games | `routers/catalog.py` |
+| POST | `/users/{user_id}/history` | replay many interactions at once (after an engine restart) | `routers/events.py` |
 | GET | `/users/{user_id}/fresh` | items new to the catalog, by the user's taste | `routers/catalog.py` |
 | GET | `/health` | model, store, experiment and reload status | `routers/admin.py` |
 | GET | `/metrics` | Prometheus metrics | `routers/admin.py` |
@@ -203,6 +204,22 @@ last *game* played, skipping accessories bought since).
 **How it works:** `Product.history` reads the feature store, i.e. exactly the history the user tower sees.
 Unknown user → empty list. Response: `{"user_id", "items": [card, ...]}`.
 
+### POST `/users/{user_id}/history`
+Bulk `/event`: replays a list of interactions, **oldest first**, for one user. The web app calls it on login, on
+demo login, and on the home page when an app user has no engine history, with the user's saved library from
+Postgres (`web/lib/history.ts`): the engine's history is a cache that a restart without Redis loses, Postgres
+is the source of truth (P1 phase F).
+
+Body: `{"items": [{"item_id": str, "ts": int | null, "rating": float | null}, ...]}`, at most 500 items
+(more → `422`). `ts` defaults to `t_ref` and `rating` to 5.0, as in `/event`.
+
+**How it works:** `Recommender.add_events` calls `add_event` for each item in order, so dedup, `hist_len`
+trimming and counts are exactly those of the same `/event` calls (unit test `test_replay_equals_one_by_one_events`).
+Replaying twice records nothing new. Unknown items are skipped, not an error (the catalog may have changed).
+Counted in `recosphere_events_total{recorded}` and `recosphere_errors_total{unknown_item}`.
+
+Response: `{"user_id", "recorded": int, "already_seen": int, "unknown": [item_id, ...]}`.
+
 ### GET `/users/{user_id}/fresh`
 "Fresh on RecoSphere": items new to the catalog (`is_new`: no interaction before the cutoff; this is NOT a
 release date, a 2016 game can be new here), without the ones the user has already played.
@@ -264,9 +281,9 @@ client `web/lib/api.ts`); cookies from before P1 (`uid` claim) are treated as lo
 | Method | Path | Purpose | Calls |
 |---|---|---|---|
 | POST | `/api/auth/signup` | create an account, sign in | app_api `POST /auth/signup` |
-| POST | `/api/auth/login` | sign in | app_api `POST /auth/login` |
+| POST | `/api/auth/login` | sign in | app_api `POST /auth/login`, `GET /library`, engine `POST /users/{id}/history` |
 | POST | `/api/auth/logout` | sign out (revokes the session) | app_api `POST /auth/logout` |
-| POST | `/api/auth/demo` | sign in as a real dataset player | engine `GET /users/demo?k=50`, app_api `POST /auth/demo` |
+| POST | `/api/auth/demo` | sign in as a real dataset player | engine `GET /users/demo?k=50`, app_api `POST /auth/demo`, `GET /library`, engine `POST /users/{id}/history` |
 | POST | `/api/onboarding` | save the first picks (cold start) | app_api `POST /library/picks`, engine `POST /event` per pick |
 | POST | `/api/play` | start / end a play session | app_api `POST /plays/start` / `end`, engine `POST /event`, `POST /feedback` (play) |
 | POST | `/api/feedback` | click beacon from a recommendation tile | `POST /feedback` |
@@ -276,7 +293,9 @@ client `web/lib/api.ts`); cookies from before P1 (`uid` claim) are treated as lo
 
 The pages themselves (home, game, search, library, onboarding) call the engine while rendering on the server:
 `/recommend?meta=true`, `/explain`, `/users/{id}/history`, `/users/{id}/fresh`, `/catalog/*`; the library page
-reads app_api `GET /library` + `/library/stats` (cards from engine `/catalog/items`).
+reads app_api `GET /library` + `/library/stats` (cards from engine `/catalog/items`). When an app user has no engine history, the
+home page replays their library (app_api `GET /library` → engine `POST /users/{id}/history`) and loads again.
+A failed replay never fails a login or a page (`replayLibrarySafe`).
 
 ### POST `/api/auth/signup`
 Body `{"email", "password", "name"?}`. Email must look valid, password 8+ characters (app_api also enforces
@@ -447,6 +466,7 @@ The first admin is created outside HTTP: `ADMIN_PASSWORD=... python -m app_api.c
 | 2026-11-15 | First version: 15 engine endpoints, 9 web API routes. |
 | 2026-11-17 | P1 phase A: new service app_api (section 3) with `GET /health`. |
 | 2026-11-17 | P1 phase D: app_api auth, library, plays, feedback and admin audit routes; service token + session id headers. |
+| 2026-11-17 | P1 phase F: new engine `POST /users/{user_id}/history` (bulk replay); web login, demo login and home replay the library into the engine. |
 | 2026-11-17 | P1 phase E: the web routes use app_api (Postgres) instead of SQLite; cookie carries `sid`; `/api/play` needs `client_event_id`. |
 | 2026-11-15 | P0.5 item 3: new `GET /users/{user_id}/fresh` ("Fresh on RecoSphere" row). |
 | 2026-11-15 | P0.5 item 2: `/explain` gets `item_type`, `in_top10`, reason `share` + `strength`; web `/api/admin/explain`. |

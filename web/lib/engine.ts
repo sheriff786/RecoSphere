@@ -58,6 +58,10 @@ export const engine = {
     get<{ items: Game[] }>(`/catalog/similar/${enc(item)}?k=${k}&item_type=${type}${user ? `&user_id=${enc(user)}` : ""}`).then((r) => r.items),
   history: (user: string, k = 20, type: ItemType = "game") =>
     get<{ items: Game[] }>(`/users/${enc(user)}/history?k=${k}&item_type=${type}`).then((r) => r.items),
+  // bulk /event, oldest first (P1 phase F: put the saved library back after an engine restart)
+  replay: (user: string, itemIds: string[]) =>
+    post<{ recorded: number; already_seen: number; unknown: string[] }>(
+      `/users/${enc(user)}/history`, { items: itemIds.map((item_id) => ({ item_id })) }),
   // new to the catalog (not a release date): by the user's taste when there is history, else newest first
   fresh: (user: string, k = 20, type: ItemType = "game") =>
     get<{ ranked_by: "taste" | "newest"; items: Game[] }>(`/users/${enc(user)}/fresh?k=${k}&item_type=${type}`),

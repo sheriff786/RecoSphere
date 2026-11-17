@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { api, ApiError } from "@/lib/api";
-import { clientUserAgent, setSessionCookie } from "@/lib/auth";
+import { clientUserAgent, setSessionCookie, toUser } from "@/lib/auth";
+import { replayLibrarySafe } from "@/lib/history";
 
 export async function POST(req: Request) {
   const { email, password } = await req.json().catch(() => ({}));
@@ -8,6 +9,7 @@ export async function POST(req: Request) {
   try {
     const s = await api.login(String(email), String(password), await clientUserAgent());
     await setSessionCookie(s.session_id);
+    await replayLibrarySafe(toUser(s)); // the engine may have restarted since the last visit
     return NextResponse.json({ ok: true, next: s.needs_onboarding ? "/onboarding" : "/" });
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 422)) {

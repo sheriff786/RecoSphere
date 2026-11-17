@@ -34,3 +34,34 @@ def test_bootstrap_and_events_follow_batch_rules():
     assert s.add_event("a", 1, 40, 5.0, 1, 2)[1] is False                 # already seen -> dedup
     uid, added = s.add_event("new", 4, 50, 5.0, 3, 2)
     assert added and uid == 3 and s.get("new")[1]["hist"] == [4]
+
+
+def _fake_engine():
+    """Just enough of a Recommender for add_event/add_events (real InMemoryStore, no model)."""
+    from types import SimpleNamespace
+    s = InMemoryStore()
+    s.load([], n_users=0, version="v1")
+    s.register_users(pl.DataFrame({"uid": [], "user_id": []}, schema={"uid": pl.Int64, "user_id": pl.Utf8}))
+    from serve.recommender import Recommender
+    e = SimpleNamespace(store=s, t_ref=1000, hist_len=3, iid_of={f"I{i}": i for i in range(6)},
+                        ctx=SimpleNamespace(store=np.array([0, 1, 1, 2, 2, 3])))
+    e.add_event = Recommender.add_event.__get__(e)
+    return e
+
+
+def test_replay_equals_one_by_one_events():
+    """P1 phase F: POST /users/{id}/history must leave the user exactly as the same /event calls would."""
+    from serve.recommender import Recommender
+    items = ["I1", "I2", "I1", "I3", "I4", "I5"]                     # a repeat, and more than hist_len
+    a, b = _fake_engine(), _fake_engine()
+    for it in items:
+        Recommender.add_event(a, "app:u", it)
+    r = Recommender.add_events(b, "app:u", [(it, None, None) for it in items])
+    ra, rb = a.store.get("app:u")[1], b.store.get("app:u")[1]
+    assert ra["seen"].tolist() == rb["seen"].tolist() == [1, 2, 3, 4, 5]
+    assert {k: v for k, v in ra.items() if k != "seen"} == {k: v for k, v in rb.items() if k != "seen"}
+    assert b.store.get("app:u")[1]["hist"] == [3, 4, 5]              # oldest -> newest, trimmed to hist_len
+    assert r == {"user_id": "app:u", "recorded": 5, "already_seen": 1, "unknown": []}
+    again = Recommender.add_events(b, "app:u", [("I1", None, None), ("GONE", None, None)])
+    assert again["recorded"] == 0 and again["already_seen"] == 1 and again["unknown"] == ["GONE"]
+    assert b.store.get("app:u")[1]["last"] == 1000                   # no ts -> the engine's frozen clock t_ref

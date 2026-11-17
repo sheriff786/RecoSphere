@@ -37,7 +37,7 @@ python -c "import json,sys; p=json.load(open(sys.argv[1])); assert p['run_id']==
 
 echo "== 2. engine :$API_PORT"
 uvicorn serve.app:app --host 127.0.0.1 --port "$API_PORT" > "$W/api.log" 2>&1 &
-PIDS+=($!)
+ENGINE_PID=$!; PIDS+=($ENGINE_PID)
 
 echo "== 3. throwaway app database + app_api :$APP_API_PORT"
 DB_URL=$(python scripts/e2e_db.py create "$E2E_PG_URL")
@@ -76,4 +76,40 @@ if [ $code -ne 0 ]; then
 fi
 python -c "import json,sys; p=json.load(open(sys.argv[1])); assert p['run_id']=='e2e-a', p; print('rollback landed on', p['run_id'])" \
   "$RANKFORGE_REPO/models/Video_Games/production.json"
+
+# P1 phase F: the engine keeps app users' history in memory here (no REDIS_URL), so a restart forgets it.
+# Two users onboard -> engine killed + restarted -> the app must replay their Postgres library.
+echo "== 6. engine restart: the library comes back from Postgres"
+export E2E_RESTART_STATE=$W/restart-state.json
+pw() { (cd web && E2E_BASE_URL=http://127.0.0.1:$WEB_PORT E2E_ENGINE_URL=http://127.0.0.1:$API_PORT         E2E_RESTART_PHASE=$1 npx playwright test e2e/restart.spec.ts) || { tail -30 "$W/web.log"; exit 1; }; }
+pw before
+kill "$ENGINE_PID" 2>/dev/null || true
+for i in $(seq 1 30); do   # wait until the port is free; Git Bash's kill may miss the native uvicorn on Windows
+  python -c "import socket,sys; s=socket.socket(); sys.exit(0 if s.connect_ex(('127.0.0.1', $API_PORT)) else 1)" && break
+  if [ "${OS:-}" = "Windows_NT" ] && [ "$i" = 5 ]; then
+    for p in $(netstat -ano | grep "127.0.0.1:$API_PORT " | grep LISTENING | awk '{print $5}' | sort -u); do taskkill //F //PID "$p" >/dev/null; done
+  fi
+  sleep 1
+done
+uvicorn serve.app:app --host 127.0.0.1 --port "$API_PORT" > "$W/api2.log" 2>&1 &
+ENGINE_PID=$!; PIDS+=($ENGINE_PID)
+python - "$E2E_RESTART_STATE" "http://127.0.0.1:$API_PORT" <<'PY'
+import json, sys, time, urllib.request
+from sqlalchemy import text
+from app_api.db.session import get_engine
+path, eng = sys.argv[1], sys.argv[2]
+for _ in range(180):                                     # model load
+    try:
+        urllib.request.urlopen(eng + "/health", timeout=2); break
+    except Exception:
+        time.sleep(1)
+s = json.load(open(path))
+with get_engine().connect() as c:
+    for k in ("a", "b"):
+        uid = c.execute(text("select id from users where email = :e"), {"e": s[k]["email"]}).scalar_one()
+        s[k]["engine_user_id"] = f"app:{uid}"
+json.dump(s, open(path, "w"))
+print("engine restarted; users", [s[k]["engine_user_id"] for k in ("a", "b")])
+PY
+pw after
 echo "E2E PASSED"

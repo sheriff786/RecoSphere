@@ -1,5 +1,6 @@
 """The user's library: onboarding picks, recent history (what the engine gets as history), stats."""
 import uuid
+from datetime import timedelta
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -24,8 +25,11 @@ def add_picks(db: DB, user_id: uuid.UUID, data: PicksIn) -> list[str]:
         if bad:
             raise Invalid(f"not playable games: {bad}")
         added = db.scalars(pg_insert(LibraryItem)
-                           .values([{"user_id": user_id, "item_id": i, "source": LibrarySource.onboarding}
-                                    for i in data.item_ids])
+                           # one statement, so now() is the same for every pick: +1 µs each keeps the pick
+                           # order, which the engine replay after a restart reads back (P1 phase F)
+                           .values([{"user_id": user_id, "item_id": i, "source": LibrarySource.onboarding,
+                                     "added_at": func.now() + timedelta(microseconds=n)}
+                                    for n, i in enumerate(data.item_ids)])
                            .on_conflict_do_nothing(index_elements=["user_id", "item_id"])
                            .returning(LibraryItem.item_id)).all()
         db.execute(update(User).where(User.id == user_id, User.onboarded_at.is_(None)).values(onboarded_at=func.now()))
