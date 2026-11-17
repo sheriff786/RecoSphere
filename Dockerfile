@@ -19,7 +19,7 @@ WORKDIR /app
 COPY requirements-serve.txt .
 RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-serve.txt
 
-COPY data/__init__.py data/item_types.py data/
+COPY data/*.py data/
 COPY eval/ eval/
 COPY retrieval/ retrieval/
 COPY ranking/ ranking/

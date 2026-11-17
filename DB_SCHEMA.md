@@ -164,12 +164,26 @@ Behaved as described: `kind` defaults to `registered`; the play transaction (a r
 NOTHING` is a no-op); history most recent first; dedup by `title_family` + `not_interested` + accessory
 filter; trigram search with a typo; delete cascade; audit row kept with `actor_id = NULL`.
 
-Found while verifying: `similarity(title, 'fantsy remake')` finds `FINAL FANTASY VII REMAKE (PS4)` (0.40) but
-not the longer `... Deluxe Edition` title, which scores under the 0.3 threshold. App search should use
-`word_similarity` (`'fantsy remake' <% title`), which compares against the best-matching part of the title.
+Search, checked on the real catalog (2026-11-17, one query, `'fantsy remake'`): `similarity()` misses the long
+`Final Fantasy VII Remake - PlayStation 4 Deluxe Edition` (0.23, under the 0.3 threshold) and ranks Final
+Fantasy VIII above it; `word_similarity()` ranks all three FF7 Remake listings first (0.57 each). But the `<%`
+operator's default threshold is 0.6, so `'fantsy remake' <% title` returns NOTHING. App search: rank by
+`word_similarity`, set `pg_trgm.word_similarity_threshold` per query (0.5 already lets in "The House of the
+Dead: Remake" at 0.50); tune it on more queries when the search moves here.
+
+## Catalog in `games` (P1 phase C, 2026-11-17)
+`make load-catalog` (`scripts/load_catalog.py` → `app_api/services/catalog_service.py`): 25,612 rows (12,422 game,
+13,045 accessory, 145 other), one transaction, batches of 1,000, idempotent (second run: 0 inserted, 0 updated),
+missing items deactivated, never deleted. Laptop → Neon us-east-1: first load 94 s, an unchanged reload 40 s (the
+rows are uploaded either way). Neon storage after the load: `games` 23 MB, whole database 32 MB.
+- Types: the classifier has 3, the schema 5: `game`/`accessory`/`other` map 1:1; `console` and `dlc` stay unused
+  until the classifier separates them (consoles are `accessory` today, DLC is `game`).
+- `title_family` = `data/title_family.py`: normalized title, split by era when first-available years jump by more
+  than 5 (Doom 2000-2007 vs `doom~2014`; Resident Evil 2 vs its remake). Games: 12,422 listings → 10,439 families,
+  1,983 listings are editions/ports of another. Manual audit: 30 random multi-listing families all looked like
+  one game; known false merges remain where neither title nor date differ (several different "Spider-Man" games,
+  2000-2007).
+- `description` is cut to 2,000 characters (the full text stays in gold).
 
 ## Not built yet
-- `scripts/load_catalog.py` (fills `games`). Mapping from the classifier (`data/item_types.py`, 3 types):
-  `game` → `game`, `accessory` → `accessory`, `other` → `other`. `console` and `dlc` need the classifier to
-  split them out first (consoles are `accessory` today; DLC is `game`). `title_family` comes with P0.5 item 4.
-- The app still uses SQLite (`web/lib/db.ts`); moving it to these tables is the rest of P1.
+- The app still uses SQLite (`web/lib/db.ts`); moving it to these tables is P1 phases D-H.

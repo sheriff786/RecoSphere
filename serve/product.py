@@ -18,10 +18,10 @@ Every list takes an optional item_type (game | accessory | other, data/item_type
 games only in game surfaces and accessories in "Gear for you".
 """
 import re
-from datetime import datetime, timezone
 
 import numpy as np
 
+from data.catalog_fields import categories, description, first_available, platforms
 from ranking.pipeline import FEATS, new_item_slots, tie_safe_top
 from retrieval.two_tower import PAD, embed_users
 
@@ -55,9 +55,7 @@ STRONG, MEDIUM = 0.40, 0.20
 
 def strength(share: float) -> str:
     return "strong" if share >= STRONG else "medium" if share >= MEDIUM else "weak"
-PLATFORMS = [("PlayStation 5", "PS5"), ("PlayStation 4", "PS4"), ("PlayStation 3", "PS3"), ("PS Vita", "Vita"),
-             ("Xbox Series", "Xbox Series"), ("Xbox One", "Xbox One"), ("Xbox 360", "Xbox 360"),
-             ("Nintendo Switch", "Switch"), ("Wii U", "Wii U"), ("3DS", "3DS"), ("PC", "PC"), ("Mac", "Mac")]
+# platform / category / description parsing: data/catalog_fields.py (shared with the app catalog loader)
 
 
 class Product:
@@ -73,17 +71,11 @@ class Product:
 
     # ------------------------------------------------------------------ catalog
     def _meta(self, i: int) -> dict:
-        text = self.rec.texts[i]
-        parts = [p.strip() for p in text.split("|")]
-        cat = parts[1] if len(parts) > 1 else ""
-        crumbs = [c.strip() for c in cat.split(">") if c.strip() and c.strip() != "Video Games"]
-        hay = f"{self.rec.titles[i]} {cat}"
-        platforms = [short for long_, short in PLATFORMS if long_ in hay][:2]
-        desc = parts[-1] if len(parts) > 3 else ""
-        dfa = int(self.rec.dfa_ts[i])
-        year = datetime.fromtimestamp(int(dfa), tz=timezone.utc).year if dfa and dfa > 0 else None
-        return {"item_id": self.rec.item_ids[i], "title": self.rec.titles[i], "platforms": platforms,
-                "categories": crumbs[:3], "year": year, "description": desc[:600],
+        text, title = self.rec.texts[i], self.rec.titles[i]
+        day = first_available(int(self.rec.dfa_ts[i]))
+        return {"item_id": self.rec.item_ids[i], "title": title, "platforms": platforms(title, text),
+                "categories": categories(text), "year": day.year if day else None,
+                "description": description(text, 600),
                 "is_new": bool(self.rec.items.is_new[i]), "item_type": str(self.rec.item_type[i]), "plays_90d": int(self.rec.items.pop_90d[i]),
                 "trending_rank": int(self.rank_of_recent[i]) + 1}
 

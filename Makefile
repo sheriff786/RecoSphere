@@ -10,7 +10,7 @@ PROFILES := obs
 PY       ?= python
 
 .DEFAULT_GOAL := help
-.PHONY: help up up-all down logs ps test smoke config e2e e2e-synthetic db-migrate db-status db-check app-api db-upgrade db-current db-drift
+.PHONY: help up up-all down logs ps test smoke config e2e e2e-synthetic db-migrate db-status db-check app-api db-upgrade db-current db-drift load-catalog
 
 help:            ## list the targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/'
@@ -60,6 +60,9 @@ db-current:      ## show the app database's Alembic revision
 
 db-drift:        ## fail if the models and the app database differ (Alembic autogenerate finds changes)
 	$(PY) -m alembic check
+
+load-catalog:    ## upsert the gold catalog into the app database's `games` (idempotent; after new data)
+	$(PY) scripts/load_catalog.py
 
 # Legacy Node runner (frozen since P1 phase A; removed in phase H). URLs from web/.env.local.
 db-migrate:      ## apply pending SQL migrations (web/db/migrations) to the app database

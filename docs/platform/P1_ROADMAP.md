@@ -1,7 +1,7 @@
 # P1 roadmap: app data on Postgres (Neon) through a Python ORM
 
-Status: decisions approved 2026-11-17. **Phases A and B done** (connection, models, Alembic baseline,
-`/health`; schemas + services with tests); C-H open. The schema itself was applied on Neon in commit `ca015cd`.
+Status: decisions approved 2026-11-17. **Phases A, B and C done** (connection, models, Alembic baseline,
+`/health`; schemas + services; the catalog in `games`, see DB_SCHEMA.md); D-H open. The schema itself was applied on Neon in commit `ca015cd`.
 
 Legend: 🆕 new · ✏️ modified · 🗑️ removed · ✅ exists, unchanged
 

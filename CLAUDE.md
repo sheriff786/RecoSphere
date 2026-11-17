@@ -54,6 +54,7 @@ cd web; npm run dev                                   # app on :3000 (needs .env
 bash scripts/ci_smoke.sh                              # whole system on synthetic data (WSL / Git Bash)
 make up / up-all / down / config / help               # Docker stack (Git Bash); config: .env from .env.example
 make app-api / db-upgrade / db-current / db-drift   # app_api on :8100; Alembic on the app DB; URLs in app_api/.env
+make load-catalog   # gold catalog -> Neon `games` (idempotent; run after new data, after `python -m data.item_types --write`)
 make e2e            # Playwright vs the running stack (no rollback)   make e2e-synthetic   # throwaway stack, = CI job e2e
 ```
 
