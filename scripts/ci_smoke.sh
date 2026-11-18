@@ -56,6 +56,18 @@ assert r["recorded"] == 3 and r["unknown"] == ["NOT-AN-ITEM"], r
 assert post("/users/app:ci-replay/history", {"items": items})["recorded"] == 0      # replay twice: nothing new
 assert g("/recommend/app:ci-replay?k=5&meta=true")["source"] == "personalized"
 assert [x["item_id"] for x in g("/users/app:ci-replay/history?k=5")["items"]] ==        [x["item_id"] for x in g("/users/app:ci/history?k=5")["items"]]
+# P1 phase G: "Not interested" = exclude, a filter after ranking. The rest keeps its order; /explain's served
+# top-10 is the same list as /recommend's with the same exclude.
+ids = lambda r: [x["item_id"] for x in r["items"]]
+full = ids(g(f"/recommend/{u}?k=20&item_type=game"))
+hide = full[:2]
+ex = "&exclude=" + ",".join(hide)
+top = ids(g(f"/recommend/{u}?k=10&item_type=game" + ex))
+assert not set(hide) & set(top) and len(top) == 10, top
+assert set(g(f"/explain/{u}?item_type=game" + ex)["items"]) == set(top)
+for path in ("/catalog/popular?k=20", f"/users/{u}/fresh?k=20", f"/catalog/similar/{pop[0]['item_id']}?k=20"):
+    sep = "&exclude=" + ",".join(ids(g(path))[:2])
+    assert not set(ids(g(path))[:2]) & set(ids(g(path + sep))), path
 # P0.5 item types: synthetic catalog has controllers; the game filter must drop every one of them
 assert g("/health")["item_types"]["accessory"] > 0
 assert all(x["item_type"] == "game" for x in g("/recommend/app:ci?k=20&item_type=game")["items"])

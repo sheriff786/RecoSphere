@@ -40,22 +40,24 @@ async function post<T>(path: string, body: unknown, headers: Record<string, stri
 }
 
 const enc = encodeURIComponent;
+// the user's "Not interested" games (app_api /feedback/hidden): the engine drops them after ranking (P1 phase G)
+const exq = (ex: string[]) => (ex.length ? `&exclude=${ex.slice(0, 500).map(enc).join(",")}` : "");
 const adminHeaders = (): Record<string, string> =>
   process.env.ENGINE_ADMIN_TOKEN ? { "x-admin-token": process.env.ENGINE_ADMIN_TOKEN } : {};
 
 export const engine = {
-  recommend: (user: string, k = 20, type: ItemType = "game") =>
-    get<RecResponse>(`/recommend/${enc(user)}?k=${k}&meta=true&item_type=${type}`),
-  explain: (user: string, items?: string[], type: ItemType = "game") =>
+  recommend: (user: string, k = 20, type: ItemType = "game", ex: string[] = []) =>
+    get<RecResponse>(`/recommend/${enc(user)}?k=${k}&meta=true&item_type=${type}${exq(ex)}`),
+  explain: (user: string, items?: string[], type: ItemType = "game", ex: string[] = []) =>
     get<{ source: string; arm: string; model_run: string; items: Record<string, Explanation> }>(
-      `/explain/${enc(user)}?item_type=${type}${items?.length ? `&items=${items.map(enc).join(",")}` : ""}`),
-  popular: (k = 24, offset = 0, newOnly = false, type: ItemType = "game") =>
-    get<{ items: Game[] }>(`/catalog/popular?k=${k}&offset=${offset}&new_only=${newOnly}&item_type=${type}`).then((r) => r.items),
+      `/explain/${enc(user)}?item_type=${type}${items?.length ? `&items=${items.map(enc).join(",")}` : ""}${exq(ex)}`),
+  popular: (k = 24, offset = 0, newOnly = false, type: ItemType = "game", ex: string[] = []) =>
+    get<{ items: Game[] }>(`/catalog/popular?k=${k}&offset=${offset}&new_only=${newOnly}&item_type=${type}${exq(ex)}`).then((r) => r.items),
   items: (ids: string[]) => get<{ items: Game[] }>(`/catalog/items?ids=${ids.map(enc).join(",")}`).then((r) => r.items),
   search: (q: string, k = 30, type: ItemType = "game") =>
     get<{ items: Game[] }>(`/catalog/search?q=${enc(q)}&k=${k}&item_type=${type}`).then((r) => r.items),
-  similar: (item: string, k = 12, user?: string, type: ItemType = "game") =>
-    get<{ items: Game[] }>(`/catalog/similar/${enc(item)}?k=${k}&item_type=${type}${user ? `&user_id=${enc(user)}` : ""}`).then((r) => r.items),
+  similar: (item: string, k = 12, user?: string, type: ItemType = "game", ex: string[] = []) =>
+    get<{ items: Game[] }>(`/catalog/similar/${enc(item)}?k=${k}&item_type=${type}${user ? `&user_id=${enc(user)}` : ""}${exq(ex)}`).then((r) => r.items),
   history: (user: string, k = 20, type: ItemType = "game") =>
     get<{ items: Game[] }>(`/users/${enc(user)}/history?k=${k}&item_type=${type}`).then((r) => r.items),
   // bulk /event, oldest first (P1 phase F: put the saved library back after an engine restart)
@@ -63,8 +65,8 @@ export const engine = {
     post<{ recorded: number; already_seen: number; unknown: string[] }>(
       `/users/${enc(user)}/history`, { items: itemIds.map((item_id) => ({ item_id })) }),
   // new to the catalog (not a release date): by the user's taste when there is history, else newest first
-  fresh: (user: string, k = 20, type: ItemType = "game") =>
-    get<{ ranked_by: "taste" | "newest"; items: Game[] }>(`/users/${enc(user)}/fresh?k=${k}&item_type=${type}`),
+  fresh: (user: string, k = 20, type: ItemType = "game", ex: string[] = []) =>
+    get<{ ranked_by: "taste" | "newest"; items: Game[] }>(`/users/${enc(user)}/fresh?k=${k}&item_type=${type}${exq(ex)}`),
   demoUsers: (k = 9) =>
     get<{ users: { user_id: string; n_games: number; recent: string[] }[] }>(`/users/demo?k=${k}`).then((r) => r.users),
   event: (user: string, item: string) => post(`/event`, { user_id: user, item_id: item }),
@@ -72,7 +74,7 @@ export const engine = {
     post(`/feedback`, { user_id: user, item_id: item, request_id: requestId, action }),
   health: () => get<Record<string, unknown>>(`/health`),
   adminSummary: () => get<AdminSummary>(`/admin/summary`, { headers: adminHeaders() }),
-  rollback: () => post<{ rolled_back_to: string; log: string[] }>(`/admin/rollback`, undefined, adminHeaders()),
+  rollback: () => post<{ rolled_back_to: string; log: string[]; swap: Record<string, unknown> }>(`/admin/rollback`, undefined, adminHeaders()),
 };
 
 export type ArmStats = {

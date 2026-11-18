@@ -5,6 +5,8 @@ import { engine } from "@/lib/engine";
 import Cover from "@/components/Cover";
 import Row from "@/components/Row";
 import WhyThis from "@/components/WhyThis";
+import NotInterested from "@/components/NotInterested";
+import { hiddenIds } from "@/lib/hidden";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +17,11 @@ export default async function GamePage({ params, searchParams }: {
   const { id } = await params;
   const { rid } = await searchParams;
   const itemId = decodeURIComponent(id);
+  const hidden = await hiddenIds(user.sid);   // "Not interested" games: out of "More like this" and the feed top 10
   const [items, similar, why, history] = await Promise.all([
-    engine.items([itemId]), engine.similar(itemId, 16, user.engine_user_id).catch(() => [] as Awaited<ReturnType<typeof engine.similar>>),
-    engine.explain(user.engine_user_id, [itemId]).catch(() => null), engine.history(user.engine_user_id, 200),
+    engine.items([itemId]),
+    engine.similar(itemId, 16, user.engine_user_id, "game", hidden).catch(() => [] as Awaited<ReturnType<typeof engine.similar>>),
+    engine.explain(user.engine_user_id, [itemId], "game", hidden).catch(() => null), engine.history(user.engine_user_id, 200),
   ]);
   const g = items[0];
   if (!g) notFound();
@@ -60,6 +64,7 @@ export default async function GamePage({ params, searchParams }: {
                   {g.item_type === "accessory" ? "Gear" : "Not a game"} · not streamable
                 </span>
               )}
+              {playable && !played && <NotInterested itemId={g.item_id} initiallyHidden={hidden.includes(g.item_id)} />}
             </div>
           </div>
           <WhyThis why={why?.items[g.item_id]} />

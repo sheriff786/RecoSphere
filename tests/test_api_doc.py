@@ -14,7 +14,8 @@ from serve.app import app as engine
 ROOT = Path(__file__).resolve().parents[1]
 DOC = (ROOT / "docs" / "API.md").read_text(encoding="utf-8")
 ROW = re.compile(r"^\| (GET|POST|PUT|PATCH|DELETE) \| `(/[^`]*)` \|", re.M)
-HANDLER = re.compile(r"export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)\b")
+# `export async function POST` and `export const POST = ...` are both Next.js route handlers
+HANDLER = re.compile(r"export\s+(?:(?:async\s+)?function|const)\s+(GET|POST|PUT|PATCH|DELETE)\b")
 
 
 def part(n: int) -> str:

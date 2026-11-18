@@ -13,6 +13,9 @@ export type ApiSession = { session_id: string; expires_at: string; needs_onboard
 export type PlayOut = {
   play_id: string; item_id: string; started_at: string; ended_at: string | null; seconds_played: number | null; first_time: boolean;
 };
+export type Audit = {
+  id: number; actor_id: string | null; action: string; target: string | null; details: Record<string, unknown>; created_at: string;
+};
 export type LibraryItem = {
   item_id: string; title: string; source: "onboarding" | "play"; added_at: string; last_played_at: string | null;
   play_count: number; seconds_played: number;
@@ -53,4 +56,13 @@ export const api = {
   playStart: (sid: string, body: { item_id: string; client_event_id: string; request_id?: string | null; surface?: string | null }) =>
     call<PlayOut>("POST", "/plays/start", { sid, body }),
   playEnd: (sid: string, body: { client_event_id: string; seconds: number }) => call<PlayOut>("POST", "/plays/end", { sid, body }),
+  // P1 phase G: "Not interested" (item_feedback) and the admin audit log
+  setFeedback: (sid: string, item_id: string, kind: "like" | "dislike" | "not_interested") =>
+    call<{ item_id: string; kind: string }>("PUT", `/feedback/${encodeURIComponent(item_id)}`, { sid, body: { kind } }),
+  clearFeedback: (sid: string, item_id: string) =>
+    call<{ cleared: boolean }>("DELETE", `/feedback/${encodeURIComponent(item_id)}`, { sid }),
+  hidden: (sid: string) => call<{ item_ids: string[] }>("GET", "/feedback/hidden", { sid }).then((r) => r.item_ids),
+  audit: (sid: string, body: { action: string; target?: string | null; details?: Record<string, unknown> }) =>
+    call<Audit>("POST", "/admin/audit", { sid, body }),
+  auditLog: (sid: string, k = 50) => call<Audit[]>("GET", `/admin/audit?k=${k}`, { sid }),
 };

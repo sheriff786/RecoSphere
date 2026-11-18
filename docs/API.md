@@ -67,6 +67,7 @@ The main endpoint: the top-k games for a user.
 | `force_arm` | – | serve a specific A/B arm (QA only; logged with `forced=true`, excluded from analysis); unknown arm → `400` |
 | `meta` | false | return full game cards (as `/catalog/items`) instead of id/title/is_new/item_type |
 | `item_type` | – | `game`, `accessory` or `other`: keep only that type (see *Item types* above); invalid value → `422` |
+| `exclude` | – | comma-separated item ids to leave out (the user's "Not interested" games, at most 500, more → `422`); dropped after ranking, so the other items keep their order and scores |
 
 **How it works** (`serve/recommender.py: Recommender.recommend`):
 1. **A/B routing** (`serve/experiments.py: ExperimentManager.route`): salted sha256 of the user id picks the
@@ -113,6 +114,7 @@ Why games are in this user's feed. Used by the app's "Why this?" panel.
 |---|---|---|
 | `items` | the user's served top 10 | comma-separated item ids to explain |
 | `item_type` | – | the feed the user sees (`game` in the app): decides the served top 10 for `in_top10` and the default `items` |
+| `exclude` | – | the user's "Not interested" games, as on `/recommend`: the served top 10 is computed without them |
 
 **How it works** (`serve/product.py: Product.explain`), with the model and policy of the user's A/B arm:
 re-scores the user's candidates and rebuilds the served top 10 exactly like `/recommend` (ranker order →
@@ -173,6 +175,7 @@ Trending games by recent popularity (as of the engine clock).
 | `offset` | 0 | paging |
 | `new_only` | false | only items marked new (no interactions before the cutoff) |
 | `item_type` | – | `game`, `accessory` or `other`: keep only that type (see *Item types* above); invalid value → `422` |
+| `exclude` | – | comma-separated item ids to leave out (the user's "Not interested" games, at most 500, more → `422`); dropped after ranking, so the other items keep their order and scores |
 
 **How it works:** `Product.popular` walks `items.recent_pop_order`. Response: `{"items": [card, ...]}`.
 
@@ -185,7 +188,8 @@ Response: `{"query": q, "items": [card, ...]}`.
 
 ### GET `/catalog/similar/{item_id}`
 Games closest to one game. Query: `k` (12, 1-50), `user_id` (optional: exclude this user's history),
-`item_type` (optional filter, see *Item types*).
+`item_type` (optional filter, see *Item types*), `exclude` (optional: comma-separated item ids to leave out, the
+user's "Not interested" games, at most 500).
 
 **How it works:** `Product.similar`: cosine similarity of the two-tower item embeddings (the vectors FAISS
 serves). Unknown item → `404`. Response: `{"item_id", "items": [card + "similarity", ...]}`.
@@ -223,7 +227,8 @@ Response: `{"user_id", "recorded": int, "already_seen": int, "unknown": [item_id
 ### GET `/users/{user_id}/fresh`
 "Fresh on RecoSphere": items new to the catalog (`is_new`: no interaction before the cutoff; this is NOT a
 release date, a 2016 game can be new here), without the ones the user has already played.
-Query: `k` (20, 1-100), `item_type` (optional filter; the app sends `game`).
+Query: `k` (20, 1-100), `item_type` (optional filter; the app sends `game`), `exclude` (optional: comma-separated
+item ids to leave out, the user's "Not interested" games, at most 500).
 
 **How it works** (`Product.fresh`): with history, sorted by taste = user-tower vector · item vector (the
 model's `tt_score`, ties by item id). The two-tower model is only run, not changed, and the ranker is not used:
@@ -289,7 +294,10 @@ client `web/lib/api.ts`); cookies from before P1 (`uid` claim) are treated as lo
 | POST | `/api/feedback` | click beacon from a recommendation tile | `POST /feedback` |
 | GET | `/api/admin/summary` | admin dashboard data | `GET /admin/summary` |
 | GET | `/api/admin/explain` | admin "Why-this inspector": raw explanation | `GET /explain/{user_id}?items=&item_type=game` |
-| POST | `/api/admin/rollback` | admin "Roll back" button | `POST /admin/rollback` |
+| POST | `/api/admin/rollback` | admin "Roll back" button | engine `GET /health`, `POST /admin/rollback`, app_api `POST /admin/audit` |
+| GET | `/api/admin/audit` | admin dashboard "Audit log" table | app_api `GET /admin/audit?k=20` |
+| POST | `/api/not-interested` | hide a game from every recommendation row | app_api `PUT /feedback/{item_id}` |
+| DELETE | `/api/not-interested` | undo "Not interested" | app_api `DELETE /feedback/{item_id}` |
 
 The pages themselves (home, game, search, library, onboarding) call the engine while rendering on the server:
 `/recommend?meta=true`, `/explain`, `/users/{id}/history`, `/users/{id}/fresh`, `/catalog/*`; the library page
@@ -343,7 +351,23 @@ hides (users only see strength bars). Engine errors → `502 {"error": ...}`.
 ### GET `/api/admin/summary` · POST `/api/admin/rollback`
 Admins only (`users.role = 'admin'` in Postgres), else `403 {"error": "forbidden"}`. Forward to the engine's
 `/admin/summary` and `/admin/rollback` with `X-Admin-Token: ENGINE_ADMIN_TOKEN` when set. Rollback errors
-→ `500 {"error": ...}`.
+→ `500 {"error": ..., "audited"}`. Every rollback attempt, failed ones too, writes one app_api audit row
+(`action: "model.rollback"`, `target` = new run, `details: {from_run, to_run, ok, error?}`); the response carries
+`audited: bool` (a failed audit write does not undo a done rollback; the dashboard says the write failed).
+
+### GET `/api/admin/audit`
+Admins only, else `403`. The last 20 admin actions from app_api `GET /admin/audit` (newest first):
+`{"items": [{"id", "actor_id", "action", "target", "details", "created_at"}, ...]}`. Shown as the
+"Audit log" table on `/admin`.
+
+### POST `/api/not-interested` · DELETE `/api/not-interested`
+Body `{"item_id"}`. POST saves "Not interested" for the signed-in user (app_api `PUT /feedback/{item_id}` with
+`kind: "not_interested"`); DELETE undoes it (Undo on the game page). → `{"ok": true, "hidden": bool}`;
+`400` without `item_id` or for an unknown game; `401` when logged out. The pages read the list once per request
+(`web/lib/hidden.ts`, app_api `GET /feedback/hidden`; one extra round trip) and send it as `exclude` to the
+engine's `/recommend`, `/explain`, `/catalog/popular`, `/catalog/similar` and `/users/{id}/fresh`: the game
+leaves every row (hero, top picks, because you played, fresh, trending, more like this). Search still finds it
+(the user asked for it). If app_api fails, the rows are shown unfiltered rather than not at all.
 
 ## 3. App API (`app_api/`, FastAPI + SQLAlchemy)
 
@@ -466,6 +490,7 @@ The first admin is created outside HTTP: `ADMIN_PASSWORD=... python -m app_api.c
 | 2026-11-15 | First version: 15 engine endpoints, 9 web API routes. |
 | 2026-11-17 | P1 phase A: new service app_api (section 3) with `GET /health`. |
 | 2026-11-17 | P1 phase D: app_api auth, library, plays, feedback and admin audit routes; service token + session id headers. |
+| 2026-11-18 | P1 phase G: engine `exclude` on `/recommend`, `/explain`, `/catalog/popular`, `/catalog/similar`, `/users/{id}/fresh`; web `POST`/`DELETE /api/not-interested`, `GET /api/admin/audit`; rollback is audited. |
 | 2026-11-17 | P1 phase F: new engine `POST /users/{user_id}/history` (bulk replay); web login, demo login and home replay the library into the engine. |
 | 2026-11-17 | P1 phase E: the web routes use app_api (Postgres) instead of SQLite; cookie carries `sid`; `/api/play` needs `client_event_id`. |
 | 2026-11-15 | P0.5 item 3: new `GET /users/{user_id}/fresh` ("Fresh on RecoSphere" row). |

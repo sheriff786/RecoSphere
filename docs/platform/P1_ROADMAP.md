@@ -1,7 +1,16 @@
 # P1 roadmap: app data on Postgres (Neon) through a Python ORM
 
-Status: decisions approved 2026-11-17. **Phases A-F done**: the web app's accounts, sessions, onboarding, plays
-and library run on app_api + Neon (SQLite code removed), and an engine restart no longer forgets app users; G-H open.
+Status: decisions approved 2026-11-17. **Phases A-G done**: the web app's accounts, sessions, onboarding, plays
+and library run on app_api + Neon (SQLite code removed), an engine restart no longer forgets app users, and
+"Not interested" + the admin audit log are live; H (cleanup) open.
+
+Phase G (2026-11-18): "Not interested" on the game page -> `item_feedback`; the pages read the hidden ids once per
+request and pass them to the engine as `exclude` (option A, approved): a serving filter applied in
+`Recommender.keep` AFTER ranking, like `item_type`, so the model, features and scores do not change and `/explain`'s
+served top 10 is the same list as `/recommend`'s. Cost: one extra app_api round trip per page (~265 ms from the
+laptop to Neon). Search still finds a hidden game. Rollback writes `admin_audit_log` (from/to run, ok or failed);
+the admin dashboard shows it. Also fixed: `tests/test_api_doc.py` missed web handlers written as
+`export const POST = ...`.
 
 Phase F (2026-11-17): Postgres `library` is the source of truth, the engine's history is a cache of it. New engine
 route `POST /users/{user_id}/history` (bulk `/event`, oldest first, same dedup: `Recommender.add_events`); the web

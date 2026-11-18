@@ -65,3 +65,37 @@ def test_replay_equals_one_by_one_events():
     again = Recommender.add_events(b, "app:u", [("I1", None, None), ("GONE", None, None)])
     assert again["recorded"] == 0 and again["already_seen"] == 1 and again["unknown"] == ["GONE"]
     assert b.store.get("app:u")[1]["last"] == 1000                   # no ts -> the engine's frozen clock t_ref
+
+
+def _fake_ranker(new_item_slots=0):
+    """A Recommender minus the model: fixed candidate scores, so recommend()'s serving steps run for real."""
+    from types import SimpleNamespace
+    from serve.recommender import Recommender
+    n = 12
+    items, scores = np.arange(n, dtype=np.int64), np.linspace(1.0, 0.0, n).astype(np.float32)  # 0 best ... 11 worst
+    e = SimpleNamespace(
+        item_type=np.array(["game"] * 10 + ["accessory"] * 2), item_ids=[f"I{i}" for i in range(n)],
+        titles=[f"T{i}" for i in range(n)], iid_of={f"I{i}": i for i in range(n)},
+        fallback=np.arange(n - 1, -1, -1, dtype=np.int64),
+        items=SimpleNamespace(is_new=np.array([False] * 8 + [True] * 4)),
+        cfg=SimpleNamespace(new_item_slots=new_item_slots),
+        store=SimpleNamespace(get=lambda u: (0, {"n_hist": 1}) if u == "known" else (None, None)),
+        score_candidates=lambda rec, timings: (items, scores))
+    for m in ("keep", "iids", "recommend"):
+        setattr(e, m, getattr(Recommender, m).__get__(e))
+    return e
+
+
+def test_exclude_only_removes_the_hidden_games():
+    """P1 phase G "Not interested": excluded games never come back; everything else keeps its order, and the
+    list is refilled from below (a filter after ranking, like item_type)."""
+    ids = lambda r: [x["item_id"] for x in r["items"]]
+    e = _fake_ranker()
+    assert ids(e.recommend("known", k=5, item_type="game")) == ["I0", "I1", "I2", "I3", "I4"]
+    assert ids(e.recommend("known", k=5, item_type="game", exclude=["I0", "I3", "UNKNOWN"])) == ["I1", "I2", "I4", "I5", "I6"]
+    # with new-item slots (I8-I11 are new; I10, I11 are accessories): hiding a new game frees its slot for the next
+    s = _fake_ranker(new_item_slots=2)
+    assert ids(s.recommend("known", k=5, item_type="game")) == ["I0", "I1", "I2", "I8", "I9"]
+    assert ids(s.recommend("known", k=5, item_type="game", exclude=["I8"])) == ["I0", "I1", "I2", "I3", "I9"]
+    # the popular fallback (no history) honours it too
+    assert ids(e.recommend("nobody", k=3, exclude=["I11"])) == ["I10", "I9", "I8"]

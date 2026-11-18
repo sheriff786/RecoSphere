@@ -134,6 +134,47 @@ test("new user: signup -> onboarding -> personalized feed -> play changes it -> 
   await expect(page.getByTestId("engine-strip")).toContainText("source personalized");
 });
 
+test("not interested: the game leaves every home row, search still finds it, undo brings it back", async ({ page }) => {
+  await page.goto("/signup");
+  await page.getByPlaceholder("Email").fill(`e2e-hide-${Date.now()}@example.test`);
+  await page.getByPlaceholder(/^Password/).fill(PASSWORD);
+  await page.getByRole("button", { name: "Create account" }).click();
+  await atPath(page, "/onboarding");
+  const picks = page.getByTestId("onboard-game");
+  for (let i = 0; i < 3; i++) await picks.nth(i).click();
+  await page.getByTestId("onboard-done").click();
+  await atPath(page, "/");
+  await expect(page.getByTestId("engine-strip")).toContainText("source personalized");
+
+  const top = row(page, "Top picks for you");
+  const before = await cardIds(top);
+  const target = before[0];
+  const href = `/game/${encodeURIComponent(target)}`;   // exact id: "/game/P1" must not match "/game/P12"
+  const links = (p: Page) => p.locator(`a[href="${href}"], a[href^="${href}?"]`);          // hero + every row
+  expect(await links(page).count(), "the top pick is on the home page").toBeGreaterThan(0);
+
+  await page.goto(`/game/${encodeURIComponent(target)}`);
+  const title = (await page.getByTestId("game-title").textContent())!;
+  await page.getByTestId("not-interested").click();
+  await expect(page.getByTestId("not-interested-done")).toBeVisible();
+
+  await page.goto("/");
+  await expect(page.getByTestId("engine-strip")).toContainText("source personalized");
+  await expect(links(page), "a hidden game is in no home row").toHaveCount(0);
+  const after = await cardIds(top);
+  expect(after.slice(0, 5), "the rest keeps its order").toEqual(before.filter((x) => x !== target).slice(0, 5));
+
+  await page.goto(`/search?q=${encodeURIComponent(title)}`);                              // search is explicit: still found
+  await expect(links(page).first()).toBeVisible();
+
+  await page.goto(`/game/${encodeURIComponent(target)}`);
+  await expect(page.getByTestId("not-interested-done")).toBeVisible();                    // remembered (Postgres)
+  await page.getByTestId("not-interested-undo").click();
+  await expect(page.getByTestId("not-interested")).toBeVisible();
+  await page.goto("/");
+  expect(await cardIds(top), "undo restores the feed").toEqual(before);
+});
+
 test("accessories are never offered as games: search, game page, play", async ({ page, request }) => {
   await page.goto("/signup");
   await page.getByPlaceholder("Email").fill(`e2e-gear-${Date.now()}@example.test`);
@@ -204,4 +245,9 @@ test("admin: roll back hot-swaps the engine to the previous model", async ({ pag
   const target = (await msg.textContent())!.replace("Rolled back to ", "").trim();
   expect(target).not.toBe(before);
   await expect(model).toHaveText(target);           // the engine hot-swapped to it
+  // P1 phase G: the rollback is in the audit log (Postgres admin_audit_log), newest first
+  const row = page.getByTestId("audit-row").first();
+  await expect(row).toContainText("model.rollback");
+  await expect(row).toContainText(`${before} → ${target}`);
+  await expect(row).toContainText("ok");
 });

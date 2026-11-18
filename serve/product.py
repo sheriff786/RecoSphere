@@ -87,19 +87,19 @@ class Product:
                 out.append(self._meta(i))
         return out
 
-    def popular(self, k=24, offset=0, new_only=False, item_type=None):
-        order = self.rec.keep(self.rec.items.recent_pop_order, item_type)
+    def popular(self, k=24, offset=0, new_only=False, item_type=None, exclude=()):
+        order = self.rec.keep(self.rec.items.recent_pop_order, item_type, self.rec.iids(exclude))
         if new_only:
             order = order[self.rec.items.is_new[order]]
         return [self._meta(int(i)) for i in order[offset: offset + k]]
 
     # ------------------------------------------------------------------ fresh
-    def fresh(self, user_id: str | None, k=20, item_type=None):
+    def fresh(self, user_id: str | None, k=20, item_type=None, exclude=()):
         """Items new to the catalog (no interaction before the cutoff: is_new), the user's seen items removed.
         With history: by taste = user-tower vector . item vector (the model's tt_score; read-only, no ranker:
         its strongest features are popularity windows, all 0 for new items). Without history: newest first
         (first-available date), because popularity cannot order items nobody has played yet."""
-        new = self.rec.keep(np.flatnonzero(self.rec.items.is_new), item_type)
+        new = self.rec.keep(np.flatnonzero(self.rec.items.is_new), item_type, self.rec.iids(exclude))
         r = self.rec.store.get(user_id)[1] if user_id else None
         if r is not None and r["n_hist"] > 0:
             new = new[~np.isin(new, r["seen"])]
@@ -174,14 +174,14 @@ class Product:
         return out
 
     # ------------------------------------------------------------------ explain
-    def feed_top10(self, items: np.ndarray, scores: np.ndarray, item_type=None) -> np.ndarray:
-        """The user's served top-10 for these candidates: ranker order -> type filter -> new-item slots
-        (same steps and arm policy as Recommender.recommend)."""
-        ranked = self.rec.keep(items[np.argsort(-scores, kind="stable")], item_type)
+    def feed_top10(self, items: np.ndarray, scores: np.ndarray, item_type=None, exclude=()) -> np.ndarray:
+        """The user's served top-10 for these candidates: ranker order -> type + "Not interested" filters ->
+        new-item slots (same steps and arm policy as Recommender.recommend)."""
+        ranked = self.rec.keep(items[np.argsort(-scores, kind="stable")], item_type, self.rec.iids(exclude))
         slots = self.rec.cfg.new_item_slots
         return new_item_slots(ranked[:100], self.rec.items.is_new, 10, slots) if slots > 0 else ranked[:10]
 
-    def explain(self, user_id: str, item_ids: list[str] | None = None, top_reasons=3, item_type=None):
+    def explain(self, user_id: str, item_ids: list[str] | None = None, top_reasons=3, item_type=None, exclude=()):
         """Explanations for `item_ids` (default: the user's served top-10 for `item_type`). Each item says whether
         it is in that top-10 (`in_top10`); each reason carries its raw SHAP `weight`, its `share` of the item's
         positive contributions and a `strength` label."""
@@ -194,9 +194,10 @@ class Product:
         order = np.argsort(-scores, kind="stable")
         pos = {int(items[j]): n + 1 for n, j in enumerate(order)}
         idx_of = {int(it): j for j, it in enumerate(items)}
-        top10 = {int(i) for i in self.feed_top10(items, scores, item_type)}
+        served = self.feed_top10(items, scores, item_type, exclude)
+        top10 = {int(i) for i in served}
         if item_ids is None:
-            item_ids = [self.rec.item_ids[int(i)] for i in self.feed_top10(items, scores, item_type)]
+            item_ids = [self.rec.item_ids[int(i)] for i in served]
         want = [self.rec.iid_of[x] for x in item_ids if x in self.rec.iid_of]
         rows = [idx_of[i] for i in want if i in idx_of]
         Xr = X.iloc[rows] if hasattr(X, "iloc") else X[rows]

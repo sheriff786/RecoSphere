@@ -187,5 +187,6 @@ rows are uploaded either way). Neon storage after the load: `games` 23 MB, whole
 
 ## In use (P1 phase E, 2026-11-17)
 The web app's signup, login, logout, demo login, onboarding, plays and library go through app_api into these tables
-(`users`, `sessions`, `library`, `play_sessions`); SQLite is gone. `item_feedback` and `admin_audit_log` have their
-app_api routes but no web UI yet (phase G).
+(`users`, `sessions`, `library`, `play_sessions`); SQLite is gone. Since phase G (2026-11-18) `item_feedback` backs the
+"Not interested" button (hidden games are sent to the engine as `exclude`) and `admin_audit_log` records every
+model rollback, shown on the admin dashboard.

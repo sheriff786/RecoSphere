@@ -6,6 +6,7 @@ import Cover from "@/components/Cover";
 import Row from "@/components/Row";
 import WhyThis from "@/components/WhyThis";
 import { replayLibrarySafe } from "@/lib/history";
+import { hiddenIds } from "@/lib/hidden";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +15,10 @@ export default async function Home() {
   if (user.kind === "app" && !user.onboarded) redirect("/onboarding");
   const uid = user.engine_user_id;
   const t0 = Date.now();
+  const hidden = await hiddenIds(user.sid);   // "Not interested": every row below leaves these out (P1 phase G)
   const [recs, history, trending, fresh] = await Promise.all([
-    engine.recommend(uid, 20), engine.history(uid, 12), engine.popular(20), engine.fresh(uid, 20),
+    engine.recommend(uid, 20, "game", hidden), engine.history(uid, 12), engine.popular(20, 0, false, "game", hidden),
+    engine.fresh(uid, 20, "game", hidden),
   ]);
   // An onboarded app user with no engine history: the engine restarted (its history is a cache). Put the saved
   // library back from Postgres and render again (P1 phase F); costs nothing on the normal path. A redirect, not a
@@ -27,8 +30,8 @@ export default async function Home() {
   }
   const last = history[0];
   const [why, because] = await Promise.all([
-    engine.explain(uid, recs.items.map((g) => g.item_id)).catch(() => null),
-    last ? engine.similar(last.item_id, 16, uid) : Promise.resolve([] as Game[]),
+    engine.explain(uid, recs.items.map((g) => g.item_id), "game", hidden).catch(() => null),
+    last ? engine.similar(last.item_id, 16, uid, "game", hidden) : Promise.resolve([] as Game[]),
   ]);
   const ms = Date.now() - t0;
   const hero = recs.items[0];

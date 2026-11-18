@@ -14,8 +14,8 @@ def catalog_items(ids: str):
 
 @router.get("/catalog/popular")
 def catalog_popular(k: int = Query(24, ge=1, le=100), offset: int = Query(0, ge=0), new_only: bool = False,
-                    item_type: ItemType | None = None):
-    return {"items": product().popular(k, offset, new_only, item_type)}
+                    item_type: ItemType | None = None, exclude: str | None = None):
+    return {"items": product().popular(k, offset, new_only, item_type, deps.exclude_ids(exclude))}
 
 
 @router.get("/catalog/search")
@@ -25,17 +25,19 @@ def catalog_search(q: str, k: int = Query(24, ge=1, le=100), item_type: ItemType
 
 @router.get("/catalog/similar/{item_id}")
 def catalog_similar(item_id: str, k: int = Query(12, ge=1, le=50), user_id: str | None = None,
-                    item_type: ItemType | None = None):
+                    item_type: ItemType | None = None, exclude: str | None = None):
+    ex = deps.exclude_ids(exclude)
     p = product()
     if item_id not in p.rec.iid_of:
         raise HTTPException(status_code=404, detail=f"unknown item_id {item_id}")
     seen = [x["item_id"] for x in p.history(user_id, k=10_000)] if user_id else []
-    return {"item_id": item_id, "items": p.similar(item_id, k, exclude=seen, item_type=item_type)}
+    return {"item_id": item_id, "items": p.similar(item_id, k, exclude=seen + ex, item_type=item_type)}
 
 
 @router.get("/users/{user_id}/fresh")
-def user_fresh(user_id: str, k: int = Query(20, ge=1, le=100), item_type: ItemType | None = None):
-    ranked_by, items = product().fresh(user_id, k, item_type)
+def user_fresh(user_id: str, k: int = Query(20, ge=1, le=100), item_type: ItemType | None = None,
+               exclude: str | None = None):
+    ranked_by, items = product().fresh(user_id, k, item_type, deps.exclude_ids(exclude))
     return {"user_id": user_id, "ranked_by": ranked_by, "items": items}
 
 

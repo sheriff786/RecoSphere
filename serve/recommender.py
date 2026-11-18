@@ -195,24 +195,35 @@ class Recommender:
         timings["ranker"] = time.perf_counter() - t
         return (items, scores, X) if return_features else (items, scores)
 
-    def keep(self, iids: np.ndarray, item_type: str | None) -> np.ndarray:
-        """iids (order kept) whose item_type matches; all of them when item_type is None."""
-        return iids if item_type is None else iids[self.item_type[iids] == item_type]
+    def keep(self, iids: np.ndarray, item_type: str | None, exclude: np.ndarray | None = None) -> np.ndarray:
+        """iids (order kept) whose item_type matches (all when None) and that are not in `exclude` (the user's
+        "Not interested" games, P1 phase G). Serving filters AFTER ranking: scores and features never change."""
+        if item_type is not None:
+            iids = iids[self.item_type[iids] == item_type]
+        if exclude is not None and len(exclude):
+            iids = iids[~np.isin(iids, exclude)]
+        return iids
 
-    def recommend(self, user_id: str, k: int = 10, rerank: bool = True, item_type: str | None = None) -> dict:
+    def iids(self, item_ids) -> np.ndarray:
+        """Internal ids of the known item ids (unknown ones dropped)."""
+        return np.array([self.iid_of[x] for x in item_ids if x in self.iid_of], dtype=np.int64)
+
+    def recommend(self, user_id: str, k: int = 10, rerank: bool = True, item_type: str | None = None,
+                  exclude: list[str] | None = None) -> dict:
         T0 = time.perf_counter()
         timings = {}
         t = time.perf_counter()
         uid, rec = self.store.get(user_id)
         timings["store_get"] = time.perf_counter() - t
+        ex = self.iids(exclude or [])
 
         if rec is None or rec["n_hist"] == 0:
-            top, scores, source = self.keep(self.fallback, item_type)[:k], None, "fallback"
+            top, scores, source = self.keep(self.fallback, item_type, ex)[:k], None, "fallback"
         else:
             items, scores_all = self.score_candidates(rec, timings)
             t = time.perf_counter()
             order = np.argsort(-scores_all, kind="stable")
-            ranked = self.keep(items[order], item_type)
+            ranked = self.keep(items[order], item_type, ex)
             top = (new_item_slots(ranked[:100], self.items.is_new, k, self.cfg.new_item_slots)
                    if rerank and self.cfg.new_item_slots > 0 else ranked[:k])
             score_of = dict(zip(items.tolist(), scores_all.tolist()))

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import type { AdminSummary, Explanation } from "@/lib/engine";
+import type { Audit } from "@/lib/api";
 
 const pct = (x: number | null | undefined) => (x == null ? "–" : `${(100 * x).toFixed(2)}%`);
 
@@ -18,13 +19,17 @@ export default function AdminDashboard() {
   const [d, setD] = useState<AdminSummary | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const load = () => fetch("/api/admin/summary").then(async (r) => (r.ok ? setD(await r.json()) : setErr(`HTTP ${r.status}`))).catch((e) => setErr(String(e)));
+  const [audit, setAudit] = useState<Audit[] | null>(null);
+  const load = () => {
+    fetch("/api/admin/summary").then(async (r) => (r.ok ? setD(await r.json()) : setErr(`HTTP ${r.status}`))).catch((e) => setErr(String(e)));
+    fetch("/api/admin/audit").then(async (r) => (r.ok ? setAudit((await r.json()).items) : null)).catch(() => null);
+  };
   useEffect(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t); }, []);
   async function rollback() {
     if (!confirm("Roll production back to the previous model? Every API worker hot-swaps within seconds.")) return;
     const r = await fetch("/api/admin/rollback", { method: "POST" });
     const j = await r.json();
-    setMsg(r.ok ? `Rolled back to ${j.rolled_back_to}` : `Rollback failed: ${j.error}`);
+    setMsg((r.ok ? `Rolled back to ${j.rolled_back_to}` : `Rollback failed: ${j.error}`) + (j.audited === false ? " (audit log write FAILED)" : ""));
     load();
   }
   if (err) return <p className="text-rose-300">Engine admin API error: {err}</p>;
@@ -88,6 +93,24 @@ export default function AdminDashboard() {
             ))}
           </tbody>
         </table>
+      </section>
+      <section className="rounded-xl bg-white/[0.03] p-5 ring-1 ring-white/10" data-testid="audit-log">
+        <h2 className="text-lg font-semibold text-white">Audit log</h2>
+        <p className="mt-1 text-xs text-zinc-500">Admin actions, newest first (Postgres admin_audit_log).</p>
+        {!audit ? <p className="mt-3 text-sm text-zinc-500">Loading…</p> : audit.length === 0 ? <p className="mt-3 text-sm text-zinc-500">No admin actions yet.</p> : (
+          <table className="mt-4 w-full text-left text-sm">
+            <thead className="text-xs uppercase tracking-wider text-zinc-500"><tr><th className="py-2">When</th><th>Action</th><th>Change</th><th>Result</th></tr></thead>
+            <tbody className="divide-y divide-white/5">
+              {audit.map((a) => (
+                <tr key={a.id} className="text-zinc-300" data-testid="audit-row">
+                  <td className="py-2">{a.created_at.slice(0, 19).replace("T", " ")}</td><td className="font-mono">{a.action}</td>
+                  <td className="font-mono">{String(a.details.from_run ?? "?")} → {String(a.details.to_run ?? a.target ?? "?")}</td>
+                  <td>{a.details.ok === false ? <span className="text-rose-300">failed</span> : "ok"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </section>
       <ExplainInspector />
       <p className="text-xs text-zinc-500">Deeper views: Grafana (localhost:3001 in docker compose), Prometheus alerts (localhost:9090/alerts), MLflow UI.</p>
