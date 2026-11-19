@@ -10,7 +10,7 @@ PROFILES := obs
 PY       ?= python
 
 .DEFAULT_GOAL := help
-.PHONY: help up up-all down logs ps test smoke config e2e e2e-synthetic db-migrate db-status db-check app-api db-upgrade db-current db-drift load-catalog
+.PHONY: help up up-all down logs ps test smoke config e2e e2e-synthetic db-migrate db-status db-check app-api db-upgrade db-current db-drift load-catalog s3-up s3-ls
 
 help:            ## list the targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/'
@@ -57,6 +57,12 @@ db-upgrade:      ## apply pending Alembic migrations to the app database
 
 db-current:      ## show the app database's Alembic revision
 	$(PY) -m alembic current
+
+s3-up:           ## local S3 server for the model registry (SeaweedFS on 127.0.0.1:8333, data in .local/)
+	bash scripts/s3_local.sh
+
+s3-ls:           ## runs published to the model registry (S3_* from .env)
+	$(PY) -m pipeline.storage ls
 
 db-drift:        ## fail if the models and the app database differ (Alembic autogenerate finds changes)
 	$(PY) -m alembic check

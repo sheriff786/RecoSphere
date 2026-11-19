@@ -251,3 +251,6 @@ web/node_modules/
 web/.next/
 web/data/
 web/.env.local
+
+# local tool binaries + their data (SeaweedFS S3 server, P2): never committed
+.local/

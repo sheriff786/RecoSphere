@@ -54,6 +54,8 @@ cd web; npm run dev                                   # app on :3000 (needs .env
 bash scripts/ci_smoke.sh                              # whole system on synthetic data (WSL / Git Bash)
 make up / up-all / down / config / help               # Docker stack (Git Bash); config: .env from .env.example
 make app-api / db-upgrade / db-current / db-drift   # app_api on :8100; Alembic on the app DB; URLs in app_api/.env
+make s3-up          # model registry: SeaweedFS 4.52 S3 on 127.0.0.1:8333 (binary + data in git-ignored .local/; S3_* in .env)
+python -m pipeline.storage publish-run <run_id> | fetch-run <run_id> <dir> | ls   # P2 registry CLI
 make load-catalog   # gold catalog -> Neon `games` (idempotent; run after new data, after `python -m data.item_types --write`)
 ADMIN_PASSWORD=... python -m app_api.cli create-admin --email <email>   # first admin (or promote an account)
 make e2e            # Playwright vs the running stack (no rollback)
@@ -97,6 +99,9 @@ E2E_PG_URL=<server url> make e2e-synthetic   # throwaway stack + throwaway DB (d
 - **Laptop (16 GB):** do not train (smoke/e2e-synthetic) while the real `make up` stack runs: paging file runs out
   (torch segfault / CUDA OOM). `make down` first. Rebuild one service with `up --no-deps <svc>` or compose
   recreates the engine too (1-2 min model load).
+- **Model registry (P2):** S3 protocol only (boto3 + `endpoint_url`); SeaweedFS locally (MinIO community is archived).
+  Runs and gold snapshots are immutable and content-checked (MANIFEST.json written last; fetch verifies sha256 before
+  the folder appears). Tests use a namespace, never the real `models/<cat>/runs/` prefix.
 - Kill Next with `next-server`, not `next start` (the process name differs), or old code keeps serving.
 - **Engine history is a cache of Postgres `library`** (P1 phase F): the web replays it (`web/lib/history.ts`,
   engine `POST /users/{id}/history`). In a server component, Next memoizes identical GET fetches per render:

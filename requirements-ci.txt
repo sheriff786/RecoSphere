@@ -6,3 +6,4 @@ scikit-learn>=1.4
 pyyaml>=6
 pytest>=8
 httpx>=0.27          # fastapi.testclient (tests/test_routers.py)
+moto[s3]>=5,<6       # in-process S3 for tests/test_storage.py
