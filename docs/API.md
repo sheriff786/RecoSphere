@@ -242,8 +242,12 @@ Liveness + what is being served. Used by the Docker healthcheck, the e2e global 
 
 Response fields: `status, category, store (redis|memory), users, items, t_ref, model_run, model_dir,
 model_loaded_at, emb_version, index, index_knob, retrieval_variant, ranker_iterations, cold_user_fallback,
-new_item_slots, item_types` (counts per type), `item_types_source` (from `Recommender.info`) and `reloads, last_reload_error, watch_seconds, experiment,
-experiment_error, experiment_warning` (from `ModelManager.info` / `ExperimentManager.info`).
+new_item_slots, item_types` (counts per type), `item_types_source` (from `Recommender.info`) and `reloads, last_reload_error, watch_seconds, model_source
+(local|s3), production_version, experiment, experiment_error, experiment_warning` (from `ModelManager.info` /
+`ExperimentManager.info`). With `MODEL_REGISTRY=s3` (P2 phase C) `model_dir` is the verified copy in
+`MODEL_CACHE_DIR`, `production_version` the S3 pointer's version, and `last_reload_error` names a refused run
+(unfinished upload, a file whose sha256 differs, a manifest that is not the promoted one) while the previous model
+keeps serving.
 
 ### GET `/metrics`
 Prometheus text format (scraped by `infra/monitoring/prometheus.yml`; multi-worker safe via
@@ -267,10 +271,11 @@ Everything the app's admin page shows. Response: `{"health": <as /health>, "live
 "reloads"} (from `metrics.snapshot`), "production_history": [last 15 promotions, newest first]}`.
 
 ### POST `/admin/rollback`
-Point production at the previous model and hot-swap. **Changes `production.json` on disk.**
+Point production at the previous model and hot-swap. **Changes the production pointer**: `production.json` on
+disk, or with `MODEL_REGISTRY=s3` the S3 pointer this engine follows (same `MODEL_NAMESPACE`; compare-and-swap).
 
 **How it works:** `pipeline/gate.py: rollback` promotes the newest history entry that is not the current
-model (logged in `production_history.jsonl`), then `ModelManager.reload("admin rollback")`. Other workers
+model (local `production_history.jsonl` or S3 `history/`), then `ModelManager.reload("admin rollback")`. Other workers
 follow within `MODEL_WATCH_SECONDS`. Response: `{"rolled_back_to": run_id, "log": [lines], "swap": {...}}`.
 No previous model → error (`RuntimeError: nothing to roll back to`).
 
@@ -490,6 +495,7 @@ The first admin is created outside HTTP: `ADMIN_PASSWORD=... python -m app_api.c
 | 2026-11-15 | First version: 15 engine endpoints, 9 web API routes. |
 | 2026-11-17 | P1 phase A: new service app_api (section 3) with `GET /health`. |
 | 2026-11-17 | P1 phase D: app_api auth, library, plays, feedback and admin audit routes; service token + session id headers. |
+| 2026-11-19 | P2 phase C: `/health` gets `model_source` + `production_version`; with `MODEL_REGISTRY=s3` the engine serves the S3 pointer's run (fetched + verified) and `/admin/rollback` moves the S3 pointer. |
 | 2026-11-18 | P1 phase G: engine `exclude` on `/recommend`, `/explain`, `/catalog/popular`, `/catalog/similar`, `/users/{id}/fresh`; web `POST`/`DELETE /api/not-interested`, `GET /api/admin/audit`; rollback is audited. |
 | 2026-11-17 | P1 phase F: new engine `POST /users/{user_id}/history` (bulk replay); web login, demo login and home replay the library into the engine. |
 | 2026-11-17 | P1 phase E: the web routes use app_api (Postgres) instead of SQLite; cookie carries `sid`; `/api/play` needs `client_event_id`. |

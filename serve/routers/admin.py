@@ -30,9 +30,9 @@ def admin_reload(force: bool = False, x_admin_token: str | None = Header(default
 def admin_summary(x_admin_token: str | None = Header(default=None)):
     mgr = STATE["mgr"]
     require_admin(mgr, x_admin_token)
-    from pipeline.config import Paths, load_config
     from pipeline.gate import production_history
-    hist = production_history(Paths(load_config(None, [f"category={mgr.cfg.category}"])))[-15:][::-1]
+    from serve.model_store import pipeline_paths
+    hist = production_history(pipeline_paths(mgr.cfg))[-15:][::-1]
     return {"health": mgr.current.info() | mgr.info(), "live": M.snapshot(), "production_history": hist}
 
 
@@ -41,8 +41,8 @@ def admin_rollback(x_admin_token: str | None = Header(default=None)):
     """Point production.json at the previous model; every worker hot-swaps within MODEL_WATCH_SECONDS."""
     mgr = STATE["mgr"]
     require_admin(mgr, x_admin_token)
-    from pipeline.config import Paths, load_config
     from pipeline.gate import rollback
+    from serve.model_store import pipeline_paths
     lines = []
-    entry = rollback(Paths(load_config(None, [f"category={mgr.cfg.category}"])), log=lines.append)
+    entry = rollback(pipeline_paths(mgr.cfg), log=lines.append)
     return {"rolled_back_to": entry["run_id"], "log": lines, "swap": mgr.reload("admin rollback")}

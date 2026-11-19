@@ -40,7 +40,7 @@ def main():
     a = ap.parse_args()
 
     rec = Recommender(ServeConfig.from_env())
-    test = pl.read_parquet(rec.cfg.gold / "test.parquet")
+    test = pl.read_parquet(rec.gold_dir / "test.parquet")
     with_hist = set(rec.hist["uid"].unique().to_list())
     cand_users = sorted(set(test["uid"].unique().to_list()) & with_hist)
     rng = np.random.default_rng(a.seed)

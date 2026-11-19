@@ -8,11 +8,12 @@ from serve.config import ServeConfig
 
 
 class FakeRec:
-    def __init__(self, cfg, store=None):
-        self.model_dir = cfg.models
+    """Same constructor as serve.recommender.Recommender (P2 C: the manager passes model_dir / gold_dir / run_id)."""
+    def __init__(self, cfg, store=None, model_dir=None, gold_dir=None, run_id=None):
+        self.model_dir, self.gold_dir = model_dir or cfg.models, gold_dir
         if (self.model_dir / "BROKEN").exists():
             raise RuntimeError("cannot load")
-        self.model_run, self.store, self.emb_version = self.model_dir.name, store or object(), "e"
+        self.model_run, self.store, self.emb_version = run_id or self.model_dir.name, store or object(), "e"
 
     def smoke_test(self):
         pass

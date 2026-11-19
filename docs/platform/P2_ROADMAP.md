@@ -1,7 +1,22 @@
 # P2 roadmap: model registry on S3 (SeaweedFS)
 
-Status: started 2026-11-19. **Phases A-B done**: the registry code, a local SeaweedFS, CI on a real S3 server;
-the production pointer + history on S3 with compare-and-swap.
+Status: started 2026-11-19. **Phases A-C done**: the registry code, a local SeaweedFS, CI on a real S3 server;
+the production pointer + history on S3 with compare-and-swap; the engine serves from the registry.
+
+Phase C (2026-11-19): `serve/model_store.py` (LocalSource | S3Source, same `MODEL_REGISTRY` switch). The watcher
+polls the pointer (one small GET); on a new key (`run_id@manifest_sha256`) it fetches run + gold snapshot into
+`MODEL_CACHE_DIR`, verified, in the background, loads `Recommender(model_dir, gold_dir, run_id)`, smoke-tests and
+swaps. Refused (old model keeps serving, not retried every tick): no MANIFEST, a size/sha256 mismatch, a manifest
+that is not the promoted one (the pointer pins `manifest_sha256`). Admin rollback/summary follow the engine's own
+pointer (`pipeline_paths`, incl. `MODEL_NAMESPACE`). Verified with the REAL engine and models in a throwaway
+namespace (deleted afterwards): startup fetched the notebook run from SeaweedFS; promote v2 -> the engine swapped by
+itself, log: reload start to swap 2.6 s (fetch 60.9 MB + verify + load + smoke test); one sequential client sent
+9,056 requests across the swap, all 200 (1,281 old model, 7,775 new; p50 19.3 ms, p99 34.7 ms, max 483.7 ms;
+one client, not the phase E load test). A corrupted run promoted as v5 was refused (`item_emb.npy: got 7 bytes ...
+manifest says 6556800`), v4 kept serving, admin rollback -> v6. That real run found a bug the moto tests missed:
+after rolling back to the run already served, `production_version` stayed old and the refused run's error stayed
+on `/health`; fixed (`_same_as_current`) and pinned by a test that fails without the fix.
+Not covered yet: A/B treatment arms (`experiments/active.yaml`) still load from local run folders.
 
 Phase B (2026-11-19): `pipeline/pointer.py` = LocalPointer (unchanged files) | S3Pointer, chosen by
 `MODEL_REGISTRY=local|s3` (opt-in; a leftover S3_ENDPOINT_URL does not move production). The pointer object is the

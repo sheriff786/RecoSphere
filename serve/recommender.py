@@ -35,15 +35,18 @@ log = logging.getLogger("recosphere")
 
 
 class Recommender:
-    def __init__(self, cfg: ServeConfig, store=None, model_dir=None):
-        """model_dir: serve THIS model folder instead of production.json (A/B treatment arms, Phase 8)."""
+    def __init__(self, cfg: ServeConfig, store=None, model_dir=None, gold_dir=None, run_id=None):
+        """model_dir: serve THIS model folder instead of production.json (A/B treatment arms, Phase 8).
+        gold_dir + run_id: a run fetched from the S3 registry with its own gold snapshot (P2 phase C,
+        serve/model_store.py); the model is only right with the data it was trained on."""
         t0 = time.perf_counter()
         torch.set_num_threads(cfg.threads); faiss.omp_set_num_threads(cfg.threads)
         self.cfg = cfg
-        G, M = cfg.gold, (model_dir or cfg.models)
-        self.model_dir = M                                         # fixed for THIS object's lifetime
-        prod = cfg.production
-        self.model_run = ("notebook (no production.json)" if M == cfg.models_root
+        G, M = (gold_dir or cfg.gold), (model_dir or cfg.models)
+        self.model_dir, self.gold_dir = M, G                       # fixed for THIS object's lifetime
+        prod = cfg.production if run_id is None else None
+        self.model_run = (run_id if run_id is not None
+                          else "notebook (no production.json)" if M == cfg.models_root
                           else prod["run_id"] if prod and M.name == prod["run_id"] and model_dir is None
                           else M.name)
         self.loaded_at = time.time()
