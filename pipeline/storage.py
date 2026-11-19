@@ -32,7 +32,7 @@ RUN_OPTIONAL = ["metrics.json", "gate_report.json", "config.yaml",   # provenanc
                 "data/manifest.json"]                    # the run's time windows: the gate's leakage guard reads it
 GOLD_FILES = ["train.parquet", "val.parquet", "test.parquet", "user_map.parquet", "item_map.parquet",
               "item_features.parquet"]
-GOLD_OPTIONAL = ["item_types.parquet"]                   # + every item_text_emb_<encoder>.npy
+GOLD_OPTIONAL = ["item_types.parquet", "item_media.parquet"]   # + every item_text_emb_<encoder>.npy
 MANIFEST = "MANIFEST.json"
 
 

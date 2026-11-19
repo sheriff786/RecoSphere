@@ -24,6 +24,7 @@ import polars as pl
 import scipy.sparse as sp
 import torch
 
+from data.item_media import load_item_media
 from data.item_types import load_item_types
 from ranking.pipeline import (FEATS, TIE_MARGIN, UserBlock, assemble, build_item_state, make_context,
                               new_item_slots, recent_popularity, tie_safe_top)
@@ -67,6 +68,9 @@ class Recommender:
         self.iid_of = {x: i for i, x in enumerate(self.item_ids)}
         types, self.item_types_source = load_item_types(G, self.item_ids, self.titles, self.texts)
         self.item_type = np.array(types)                           # game | accessory | other (serving filter only)
+        # pictures for the app (data/item_media.py): presentation only, never a feature. The run's gold snapshot may
+        # predate the file, so the local gold folder is the fallback.
+        self.media, self.item_media_source = load_item_media([G, cfg.gold], self.item_ids)
 
         self.model, ck, dfa_t = load_two_tower(M / "two_tower.pt", G, "cpu")
         self.hist_len = ck["cfg"]["hist_len"]
@@ -147,7 +151,8 @@ class Recommender:
                 "retrieval_variant": self.rmeta["retrieval_variant"], "ranker_iterations": self.rmeta["best_iteration"],
                 "cold_user_fallback": self.policy["cold_user_fallback"], "new_item_slots": self.cfg.new_item_slots,
                 "item_types": {t: int((self.item_type == t).sum()) for t in ("game", "accessory", "other")},
-                "item_types_source": self.item_types_source}
+                "item_types_source": self.item_types_source,
+                "item_media": {"with_cover": sum(m is not None for m in self.media), "source": self.item_media_source}}
 
     # -------------------------------------------------------------------------------------------
     def user_block(self, rec: dict) -> UserBlock:

@@ -1,5 +1,8 @@
-// Deterministic generated box art: hash(title) -> two hues + one of 4 patterns. No images, no copyright,
-// works offline, and the same game always gets the same cover.
+import CoverImage from "./CoverImage";
+
+// A game's cover: its real picture when the engine sends one (`image`, data/item_media.py), else deterministic
+// generated box art: hash(title) -> two hues + one of 4 patterns (works offline, the same game always gets the
+// same cover). The generated cover is also the fallback when the picture fails to load.
 function hash(s: string) {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -20,7 +23,15 @@ function wrap(title: string, max = 13, lines = 3): string[] {
   return out.slice(0, lines);
 }
 
-export default function Cover({ title, platform, isNew, className = "" }: {
+export default function Cover({ title, platform, isNew, image, className = "" }: {
+  title: string; platform?: string; isNew?: boolean; image?: string | null; className?: string;
+}) {
+  const generated = <GeneratedCover title={title} platform={platform} isNew={isNew} className={className} />;
+  if (!image) return generated;
+  return <CoverImage src={image} alt={title} isNew={isNew} className={className}>{generated}</CoverImage>;
+}
+
+function GeneratedCover({ title, platform, isNew, className = "" }: {
   title: string; platform?: string; isNew?: boolean; className?: string;
 }) {
   const h = hash(title || "?");

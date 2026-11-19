@@ -164,7 +164,14 @@ Game cards by id. Query: `ids` (required, comma-separated). Unknown ids are skip
 release `year`, `description` (max 600 chars), `is_new`, `item_type`, `plays_90d`, `trending_rank`.
 
 Response: `{"items": [card, ...]}`. Card fields: `item_id, title, platforms, categories, year, description,
-is_new, item_type, plays_90d, trending_rank`.
+is_new, item_type, plays_90d, trending_rank, image` (every list's cards have these), plus `image_hires` and
+`gallery` (up to 8 URLs) here only, for the game page.
+
+`image` / `image_hires` / `gallery` are the product's own pictures from the Amazon metadata
+(`data/item_media.py` → `gold/item_media.parquet`, matched by item id; 25,611 of 25,612 items have a cover), Amazon
+CDN links (only `https://m.media-amazon.com/images/` URLs pass). `null` / `[]` when there is none: the app then draws
+its generated cover. Presentation only, not a model feature. The engine reads the file from the run's gold snapshot,
+else from the local gold folder (`/health` → `item_media.source`).
 
 ### GET `/catalog/popular`
 Trending games by recent popularity (as of the engine clock).
@@ -495,6 +502,7 @@ The first admin is created outside HTTP: `ADMIN_PASSWORD=... python -m app_api.c
 | 2026-11-15 | First version: 15 engine endpoints, 9 web API routes. |
 | 2026-11-17 | P1 phase A: new service app_api (section 3) with `GET /health`. |
 | 2026-11-17 | P1 phase D: app_api auth, library, plays, feedback and admin audit routes; service token + session id headers. |
+| 2026-11-19 | Cards get `image` (real cover); `/catalog/items` also `image_hires` + `gallery`; `/health` gets `item_media`. |
 | 2026-11-19 | P2 phase C: `/health` gets `model_source` + `production_version`; with `MODEL_REGISTRY=s3` the engine serves the S3 pointer's run (fetched + verified) and `/admin/rollback` moves the S3 pointer. |
 | 2026-11-18 | P1 phase G: engine `exclude` on `/recommend`, `/explain`, `/catalog/popular`, `/catalog/similar`, `/users/{id}/fresh`; web `POST`/`DELETE /api/not-interested`, `GET /api/admin/audit`; rollback is audited. |
 | 2026-11-17 | P1 phase F: new engine `POST /users/{user_id}/history` (bulk replay); web login, demo login and home replay the library into the engine. |

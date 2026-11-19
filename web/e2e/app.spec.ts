@@ -36,9 +36,10 @@ async function login(page: Page, email: string, password: string) {
 const row = (page: Page, title: string | RegExp) =>
   page.getByTestId("row").filter({ has: page.getByRole("heading", { name: title }) });
 
-// titles drawn on generated covers (svg aria-label) inside a locator
+// cover titles inside a locator: generated covers (svg aria-label) or real pictures (img[data-cover] alt)
 const coverTitles = (l: Locator) =>
-  l.locator("svg[role=img]").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") ?? ""));
+  l.locator("svg[role=img], img[data-cover]").evaluateAll((els) =>
+    els.map((e) => e.getAttribute("aria-label") ?? e.getAttribute("alt") ?? ""));
 
 // item ids of the cards in a row, in order (from the card links: /game/<id>?rid=...)
 async function cardIds(r: Locator): Promise<string[]> {

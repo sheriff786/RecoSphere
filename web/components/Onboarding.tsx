@@ -20,7 +20,7 @@ export default function Onboarding({ games }: { games: Game[] }) {
           return (
             <button key={g.item_id} onClick={() => toggle(g.item_id)} data-testid="onboard-game" aria-pressed={on}
                     className={`relative overflow-hidden rounded-xl text-left ring-2 transition ${on ? "ring-cyan-400 scale-[0.97]" : "ring-transparent hover:ring-white/30"}`}>
-              <Cover title={g.title} platform={g.platforms?.[0]} isNew={g.is_new} className="block aspect-[3/4] w-full" />
+              <Cover title={g.title} platform={g.platforms?.[0]} isNew={g.is_new} image={g.image} className="block aspect-[3/4] w-full" />
               {on && <span className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-cyan-400 font-bold text-black">✓</span>}
             </button>
           );

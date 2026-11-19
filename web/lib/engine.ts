@@ -10,6 +10,8 @@ export type ItemType = "game" | "accessory" | "other";
 export type Game = {
   item_id: string; title: string; platforms: string[]; categories: string[]; year: number | null;
   description: string; is_new: boolean; item_type: ItemType; plays_90d: number; trending_rank: number;
+  image?: string | null;                     // real cover (Amazon CDN) or null -> generated cover
+  image_hires?: string | null; gallery?: string[];   // /catalog/items only (the game page)
   score?: number | null; similarity?: number;
 };
 export type Reason = {

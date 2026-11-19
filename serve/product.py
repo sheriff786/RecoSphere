@@ -77,14 +77,17 @@ class Product:
                 "categories": categories(text), "year": day.year if day else None,
                 "description": description(text, 600),
                 "is_new": bool(self.rec.items.is_new[i]), "item_type": str(self.rec.item_type[i]), "plays_90d": int(self.rec.items.pop_90d[i]),
-                "trending_rank": int(self.rank_of_recent[i]) + 1}
+                "trending_rank": int(self.rank_of_recent[i]) + 1,
+                "image": (self.rec.media[i] or {}).get("cover")}          # None -> the app's generated cover
 
     def items(self, item_ids):
+        """Full cards (the game page): + the hi-res cover and the gallery."""
         out = []
         for x in item_ids:
             i = self.rec.iid_of.get(x)
             if i is not None:
-                out.append(self._meta(i))
+                m = self.rec.media[i] or {}
+                out.append(self._meta(i) | {"image_hires": m.get("cover_hires"), "gallery": m.get("gallery", [])})
         return out
 
     def popular(self, k=24, offset=0, new_only=False, item_type=None, exclude=()):

@@ -42,11 +42,11 @@ export default async function Home() {
     <div>
       {hero && (
         <section className="relative overflow-hidden border-b border-white/5">
-          <div className="absolute inset-0 opacity-30 blur-3xl"><Cover title={hero.title} className="h-full w-full" /></div>
+          <div className="absolute inset-0 opacity-30 blur-3xl"><Cover title={hero.title} image={hero.image} className="h-full w-full" /></div>
           <div className="relative mx-auto grid max-w-7xl items-center gap-10 px-6 py-12 md:grid-cols-[260px_1fr_340px] md:px-10">
             <Link href={`/game/${encodeURIComponent(hero.item_id)}?rid=${recs.request_id}`}
                   className="hidden overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/20 md:block">
-              <Cover title={hero.title} platform={hero.platforms[0]} isNew={hero.is_new} className="block aspect-[3/4] w-full" />
+              <Cover title={hero.title} platform={hero.platforms[0]} isNew={hero.is_new} image={hero.image} className="block aspect-[3/4] w-full" />
             </Link>
             <div>
               <div className="text-xs font-semibold tracking-widest text-violet-300">{personalized ? "TOP PICK FOR YOU" : "POPULAR RIGHT NOW"}</div>

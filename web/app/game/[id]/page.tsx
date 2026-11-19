@@ -30,10 +30,10 @@ export default async function GamePage({ params, searchParams }: {
   return (
     <div>
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 opacity-25 blur-3xl"><Cover title={g.title} className="h-full w-full" /></div>
+        <div className="absolute inset-0 opacity-25 blur-3xl"><Cover title={g.title} image={g.image} className="h-full w-full" /></div>
         <div className="relative mx-auto grid max-w-7xl gap-10 px-6 py-12 md:grid-cols-[300px_1fr_340px] md:px-10">
           <div className="overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/20">
-            <Cover title={g.title} platform={g.platforms[0]} isNew={g.is_new} className="block aspect-[3/4] w-full" />
+            <Cover title={g.title} platform={g.platforms[0]} isNew={g.is_new} image={g.image_hires ?? g.image} className="block aspect-[3/4] w-full" />
           </div>
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-white md:text-4xl" data-testid="game-title">{g.title}</h1>
@@ -70,6 +70,21 @@ export default async function GamePage({ params, searchParams }: {
           <WhyThis why={why?.items[g.item_id]} />
         </div>
       </section>
+      {!!g.gallery?.length && (
+        <section className="mx-auto max-w-7xl px-6 pt-8 md:px-10" data-testid="gallery">
+          <h2 className="text-lg font-semibold text-white">Gallery</h2>
+          <div className="mt-3 flex snap-x gap-3 overflow-x-auto pb-2">
+            {g.gallery.map((src, i) => (
+              <a key={src} href={src} target="_blank" rel="noreferrer noopener"
+                 className="shrink-0 snap-start overflow-hidden rounded-lg ring-1 ring-white/10 hover:ring-violet-400/70">
+                {/* eslint-disable-next-line @next/next/no-img-element -- remote CDN image */}
+                <img src={src} alt={`${g.title}, picture ${i + 2}`} loading="lazy" decoding="async" referrerPolicy="no-referrer"
+                     className="h-48 w-auto max-w-[22rem] bg-zinc-900 object-contain" />
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
       <Row title="More like this" games={similar} subtitle="cosine similarity of two-tower item embeddings" />
     </div>
   );
