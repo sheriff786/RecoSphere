@@ -13,6 +13,14 @@ unchanged; a second run of the tool refuses). Proof: the real engine in local mo
 scores, source; 287 personalized, 14 fallback)**, same `emb_version` 1941da6ddedd; A/B off and exposures to a temp
 folder for both. CI: `scripts/ci_registry.sh` on the SeaweedFS container: pipeline (S3 mode) -> engine serves from S3
 -> second run -> the watcher swaps -> admin rollback -> S3 history v1 reg-a, v2 reg-b, v3 reg-a (passed locally first).
+**Cloud (2026-11-19): AWS S3** `recospherestorage` (ap-southeast-2), IAM user `recosphere-registry` with an inline
+bucket-only policy (List/Get/Put/Delete on that bucket; anything else -> AccessDenied, anonymous -> 403). The code
+needed one setting: `S3_ADDRESSING_STYLE=virtual` (SeaweedFS needs path-style). Setup lesson: the user had been
+created with the permissions boundary `AmazonS3FilesFullAccess` (the "S3 Files" service, `s3files:*`, not `s3:*`),
+which denied every S3 call ("no permissions boundary allows ..."); removed. On AWS: both real-server tests passed
+(round trip incl. a 12 MB multipart upload + corrupt refusal; the compare-and-swap race got 412), the history was
+migrated (175.7 MB, 56 s from the laptop), and the engine started from AWS in 49 s (download + verify + load +
+feature store) and answered the same 301 users identically: 301/301. CI keeps using SeaweedFS (no cloud keys in CI).
 Switching for real: `MODEL_REGISTRY=s3` for BOTH the pipeline and the engine. Running one of them in local mode
 afterwards would make the two pointers disagree.
 

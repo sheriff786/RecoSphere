@@ -151,3 +151,17 @@ def test_load_s3_env_reads_only_s3_lines_and_never_overrides(tmp_path, monkeypat
     storage.load_s3_env(env)
     assert "DATABASE_URL" not in os.environ                                    # other secrets are not read
     assert os.environ["S3_BUCKET"] == "from-env" and os.environ["S3_ACCESS_KEY_ID"] == "k1"
+
+
+def test_addressing_style_from_env(monkeypatch):
+    """SeaweedFS needs path-style URLs, AWS S3 wants virtual-hosted ones: S3_ADDRESSING_STYLE picks."""
+    monkeypatch.setenv("S3_ENDPOINT_URL", "https://s3.ap-south-1.amazonaws.com")
+    monkeypatch.setenv("S3_ACCESS_KEY_ID", "k"); monkeypatch.setenv("S3_SECRET_ACCESS_KEY", "s")
+    monkeypatch.delenv("S3_ADDRESSING_STYLE", raising=False)
+    assert S3Config.from_env().addressing_style == "path"                     # default: the local server
+    monkeypatch.setenv("S3_ADDRESSING_STYLE", "virtual")
+    c = S3Config.from_env()
+    assert c.addressing_style == "virtual" and c.client().meta.config.s3["addressing_style"] == "virtual"
+    monkeypatch.setenv("S3_ADDRESSING_STYLE", "bogus")
+    with pytest.raises(ValueError):
+        S3Config.from_env()

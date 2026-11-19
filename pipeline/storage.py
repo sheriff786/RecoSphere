@@ -47,23 +47,28 @@ class S3Config:
     secret_key: str
     bucket: str
     region: str = "us-east-1"
+    addressing_style: str = "path"      # path: SeaweedFS / MinIO; virtual: AWS S3 (bucket.s3.<region>.amazonaws.com)
 
     @classmethod
     def from_env(cls) -> "S3Config | None":
-        """None when S3_ENDPOINT_URL is unset: the pipeline and the engine stay in local-disk mode."""
+        """None when S3_ENDPOINT_URL is unset: the pipeline and the engine stay in local-disk mode.
+        AWS S3: S3_ENDPOINT_URL=https://s3.<region>.amazonaws.com, S3_REGION=<region>, S3_ADDRESSING_STYLE=virtual."""
         url = os.environ.get("S3_ENDPOINT_URL")
         if not url:
             return None
+        style = os.environ.get("S3_ADDRESSING_STYLE", "path")
+        if style not in ("path", "virtual", "auto"):
+            raise ValueError(f"S3_ADDRESSING_STYLE must be path, virtual or auto, got {style!r}")
         return cls(endpoint_url=url, access_key=os.environ["S3_ACCESS_KEY_ID"],
                    secret_key=os.environ["S3_SECRET_ACCESS_KEY"], bucket=os.environ.get("S3_BUCKET", "recosphere"),
-                   region=os.environ.get("S3_REGION", "us-east-1"))
+                   region=os.environ.get("S3_REGION", "us-east-1"), addressing_style=style)
 
     def client(self):
         import boto3
         from botocore.config import Config
         return boto3.client("s3", endpoint_url=self.endpoint_url, aws_access_key_id=self.access_key,
                             aws_secret_access_key=self.secret_key, region_name=self.region,
-                            config=Config(signature_version="s3v4", s3={"addressing_style": "path"},
+                            config=Config(signature_version="s3v4", s3={"addressing_style": self.addressing_style},
                                           retries={"max_attempts": 5, "mode": "standard"}))
 
 
