@@ -7,6 +7,7 @@ RecoSphere training pipeline (Phase 7a–7c).
     python -m pipeline.run --register-existing              # wrap notebook 03-06 models as the first production run
     python -m pipeline.run --run-id <id> --steps promote --force   # promote even if the gate failed
     python -m pipeline.run --rollback                       # production -> previous model
+    MODEL_REGISTRY=s3 python -m pipeline.run                # P2: publish the run to S3, move the S3 pointer
 
 Exit codes: 0 ok, 2 gate failed (not promoted) — so a scheduler (Airflow, cron) can react.
 """
@@ -22,6 +23,8 @@ import yaml
 from pipeline.config import Paths, load_config
 from pipeline.data import load_run_data, prepare
 from pipeline.gate import current_production, gate, promote, rollback
+from pipeline.pointer import pointer_store, registry_for
+from pipeline.storage import load_s3_env
 from pipeline.steps import build_index, evaluate_step, train_ranker, train_retrieval
 from pipeline.tracking import Tracker
 
@@ -38,6 +41,15 @@ def setup_log(run_dir=None):
     if run_dir is not None:
         fh = logging.FileHandler(run_dir / "pipeline.log", encoding="utf-8"); fh.setFormatter(fmt); logger.addHandler(fh)
     return logger.info
+
+
+def publish_for_promotion(paths, run_dir, log):
+    """S3 mode (P2 phase D): engines on other machines can only load a published run, so the run + its gold
+    snapshot go to the registry right before the pointer moves. Local mode: nothing to do."""
+    if pointer_store(paths).kind == "s3":
+        reg = registry_for(paths)
+        reg.ensure_bucket()
+        reg.publish_run(run_dir, paths.gold, log)
 
 
 def register_existing(cfg, paths, log):
@@ -60,6 +72,7 @@ def register_existing(cfg, paths, log):
     tr.metrics(evaluate_step(cfg, rd, log))
     for a in ("metrics.json", "serving_policy.json"):
         tr.artifact(run_dir / a)
+    publish_for_promotion(paths, run_dir, log)
     promote(paths, run_dir, "registered notebook models", log)
     tr.tags({"promoted": "true"}); tr.end()
 
@@ -75,6 +88,7 @@ def main():
     ap.add_argument("--rollback", action="store_true")
     a = ap.parse_args()
 
+    load_s3_env()                                         # S3_* from .env if unset; MODEL_REGISTRY stays explicit
     cfg = load_config(a.config, a.set)
     paths = Paths(cfg)
     if a.rollback:
@@ -136,6 +150,7 @@ def main():
                 if cur and cur["run_id"] == run_id:
                     log(f"{run_id} is already production")
                 elif passed or a.force:
+                    publish_for_promotion(paths, run_dir, log)
                     promote(paths, run_dir, "gate passed" if passed else "forced", log)
                     tr.tags({"promoted": "true"})   # "ever promoted"; production.json is the live truth
                 else:

@@ -41,6 +41,13 @@ jobs:
           grep -q "2 passed" "$RUNNER_TEMP/s3.txt" || { echo "the real-server tests did not all run"; docker logs s3 | tail -40; exit 1; }
       - name: End-to-end smoke test (synthetic data)
         run: bash scripts/ci_smoke.sh
+      - name: Model registry end to end (pipeline -> SeaweedFS -> engine swap -> rollback)
+        env:
+          S3_ENDPOINT_URL: http://127.0.0.1:8333
+          S3_ACCESS_KEY_ID: ci
+          S3_SECRET_ACCESS_KEY: ci-only-secret-0123456789
+          S3_BUCKET: recosphere
+        run: bash scripts/ci_registry.sh
       - name: Compose config (core + every profile) via the Makefile
         run: make config
       - name: Promtool check (alert rules)

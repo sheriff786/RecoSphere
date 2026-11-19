@@ -56,6 +56,8 @@ make up / up-all / down / config / help               # Docker stack (Git Bash);
 make app-api / db-upgrade / db-current / db-drift   # app_api on :8100; Alembic on the app DB; URLs in app_api/.env
 make s3-up          # model registry: SeaweedFS 4.52 S3 on 127.0.0.1:8333 (binary + data in git-ignored .local/; S3_* in .env)
 python -m pipeline.storage publish-run <run_id> | fetch-run <run_id> <dir> | ls   # P2 registry CLI
+MODEL_REGISTRY=s3 python -m pipeline.run   /   MODEL_REGISTRY=s3 uvicorn serve.app:app ...   # registry mode (both!)
+bash scripts/ci_registry.sh               # pipeline -> S3 -> engine swap -> rollback (needs S3_* env; = CI step)
 make load-catalog   # gold catalog -> Neon `games` (idempotent; run after new data, after `python -m data.item_types --write`)
 ADMIN_PASSWORD=... python -m app_api.cli create-admin --email <email>   # first admin (or promote an account)
 make e2e            # Playwright vs the running stack (no rollback)

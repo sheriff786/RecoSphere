@@ -1,7 +1,20 @@
 # P2 roadmap: model registry on S3 (SeaweedFS)
 
-Status: started 2026-11-19. **Phases A-C done**: the registry code, a local SeaweedFS, CI on a real S3 server;
-the production pointer + history on S3 with compare-and-swap; the engine serves from the registry.
+Status: started 2026-11-19. **Phases A-D done**: the registry code, a local SeaweedFS, CI on a real S3 server;
+the production pointer + history on S3 with compare-and-swap; the engine serves from the registry; the pipeline
+publishes + promotes in S3 mode and the real production history lives in the registry.
+
+Phase D (2026-11-19): `pipeline.run` publishes the run (+ gold) right before it promotes when `MODEL_REGISTRY=s3`
+(`publish_for_promotion`, also for `--register-existing`); `gate.promote` stays strict. `pipeline/migrate_registry.py`
+moved the real history (2 promotions: `nb-20261111-171147` "registered notebook models", `20261111-171751` "gate
+passed", original dates kept) to s3://recosphere/models/Video_Games (S3 production = 20261111-171751 v2; local files
+unchanged; a second run of the tool refuses). Proof: the real engine in local mode and in S3 mode answered
+`/recommend?k=10&item_type=game` for the same 301 users (300 gold users + 1 cold) **identically: 301/301 (item ids,
+scores, source; 287 personalized, 14 fallback)**, same `emb_version` 1941da6ddedd; A/B off and exposures to a temp
+folder for both. CI: `scripts/ci_registry.sh` on the SeaweedFS container: pipeline (S3 mode) -> engine serves from S3
+-> second run -> the watcher swaps -> admin rollback -> S3 history v1 reg-a, v2 reg-b, v3 reg-a (passed locally first).
+Switching for real: `MODEL_REGISTRY=s3` for BOTH the pipeline and the engine. Running one of them in local mode
+afterwards would make the two pointers disagree.
 
 Phase C (2026-11-19): `serve/model_store.py` (LocalSource | S3Source, same `MODEL_REGISTRY` switch). The watcher
 polls the pointer (one small GET); on a new key (`run_id@manifest_sha256`) it fetches run + gold snapshot into
