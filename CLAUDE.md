@@ -101,7 +101,8 @@ E2E_PG_URL=<server url> make e2e-synthetic   # throwaway stack + throwaway DB (d
   recreates the engine too (1-2 min model load).
 - **Model registry (P2):** S3 protocol only (boto3 + `endpoint_url`); SeaweedFS locally (MinIO community is archived).
   Runs and gold snapshots are immutable and content-checked (MANIFEST.json written last; fetch verifies sha256 before
-  the folder appears). Tests use a namespace, never the real `models/<cat>/runs/` prefix.
+  the folder appears). Tests use a namespace, never the real `models/<cat>/runs/` prefix. The pointer store is
+  `MODEL_REGISTRY=local|s3` (pipeline/pointer.py); on S3 promotion is compare-and-swap (If-Match), never a blind write.
 - Kill Next with `next-server`, not `next start` (the process name differs), or old code keeps serving.
 - **Engine history is a cache of Postgres `library`** (P1 phase F): the web replays it (`web/lib/history.ts`,
   engine `POST /users/{id}/history`). In a server component, Next memoizes identical GET fetches per render:

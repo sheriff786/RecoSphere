@@ -29,6 +29,7 @@ def load_config(path=None, overrides=()):
 class Paths:
     def __init__(self, cfg):
         self.category = cfg["category"]
+        self.namespace = cfg.get("namespace") or None        # S3 registry prefix too (pipeline/pointer.py)
         self.data_root = Path(os.environ.get("RANKFORGE_DATA", "data")).resolve()
         self.repo_root = Path(os.environ.get("RANKFORGE_REPO", ".")).resolve()
         self.gold = self.data_root / "gold" / self.category

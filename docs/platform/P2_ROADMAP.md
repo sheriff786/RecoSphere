@@ -1,6 +1,19 @@
 # P2 roadmap: model registry on S3 (SeaweedFS)
 
-Status: started 2026-11-19. **Phase A done**: the registry code, a local SeaweedFS, CI on a real S3 server.
+Status: started 2026-11-19. **Phases A-B done**: the registry code, a local SeaweedFS, CI on a real S3 server;
+the production pointer + history on S3 with compare-and-swap.
+
+Phase B (2026-11-19): `pipeline/pointer.py` = LocalPointer (unchanged files) | S3Pointer, chosen by
+`MODEL_REGISTRY=local|s3` (opt-in; a leftover S3_ENDPOINT_URL does not move production). The pointer object is the
+lock: written with `If-Match: <ETag>` (`If-None-Match: *` for the first one), so of two concurrent promotions one
+gets 412 (`ConcurrentPromotion`) instead of silently overwriting; then `history/<version>.json` (If-None-Match).
+Probed first: SeaweedFS 4.52 and moto 5.2.5 both answer 412 to both conditions. A crash between the two writes
+loses nothing (history() includes the current pointer). In S3 mode a run must be published before promotion, and
+the gate fetches production's run when it was trained elsewhere (`resolve_run`); runs now carry
+`data/manifest.json` (the leakage guard's `t_test`). Verified: the same promote/rollback contract on both stores
+(tests), mutation checks (no CAS -> 2 tests fail; no crash recovery -> 1 fails), the race on the real server, and a
+demo with the two real runs in a throwaway namespace: v1 -> v2 -> rollback v3, single runs on localhost: promote
+50-77 ms, rollback 101 ms.
 
 Phase A (2026-11-19), verified on the laptop: the production run `20261111-171751` (10 files, 60.9 MB) and its
 gold snapshot `35f9040f573514ae` (8 files, 54.2 MB) published to SeaweedFS and fetched back byte-identical
@@ -20,7 +33,8 @@ replicas swap with 0 failed requests under load.*
 - **Client: boto3** with `endpoint_url`: the code speaks the S3 protocol only, so AWS S3 or MinIO AIStor later is
   a config change. Unit tests use **moto** (in-process S3); integration tests use the real server.
 - Only production-history runs are published; `replay/` and `studies/` (research, ~1.7 GB) stay local.
-- Local-disk mode stays (dev, tests, CI smoke): S3 mode is on only when `S3_ENDPOINT_URL` is set.
+- Local-disk mode stays (dev, tests, CI smoke): S3 mode is on only with `MODEL_REGISTRY=s3` (phase B decision:
+  explicit, not inferred from `S3_ENDPOINT_URL`).
 
 ## Bucket layout (ADR-3, extended)
 ```

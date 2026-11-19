@@ -31,6 +31,7 @@ import polars as pl
 
 from pipeline.config import Paths, load_config
 from pipeline.data import load_run_data
+from pipeline.gate import production_history
 
 METRICS = ["ranker/all/ndcg@10", "ranker/all/recall@100", "candidates/recall_union", "recent_pop/all/ndcg@10"]
 
@@ -85,7 +86,7 @@ def main():
                          "test_rows": man["rows"]["test"], "test_users": m["eval/n_users"],
                          **{k: m[k] for k in METRICS}, "gate_passed": gate["passed"],
                          "failed_checks": [x["check"] for x in gate["checks"] if not x["passed"]]})
-    hist = [json.loads(x) for x in paths.production_history.read_text().splitlines() if x.strip()]
+    hist = production_history(paths)
     promoted = {h["run_id"] for h in hist}
     for t in timeline:
         t["promoted"] = t["run_id"] in promoted

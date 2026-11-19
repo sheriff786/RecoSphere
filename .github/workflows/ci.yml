@@ -37,8 +37,8 @@ jobs:
           python -c "import json,os; json.dump({'identities':[{'name':'ci','credentials':[{'accessKey':os.environ['S3_ACCESS_KEY_ID'],'secretKey':os.environ['S3_SECRET_ACCESS_KEY']}],'actions':['Admin','Read','List','Tagging','Write']}]}, open(os.environ['RUNNER_TEMP']+'/s3/s3.json','w'))"
           docker run -d --name s3 -p 8333:8333 -v "$RUNNER_TEMP/s3:/conf" chrislusf/seaweedfs:4.52             mini -dir=/data -s3.config=/conf/s3.json -bucket=recosphere -admin.ui=false
           for i in $(seq 1 60); do curl -s -o /dev/null http://127.0.0.1:8333/ && break; sleep 1; done
-          python -m pytest -q tests/test_storage.py -k real_server -rs | tee "$RUNNER_TEMP/s3.txt"
-          grep -q "1 passed" "$RUNNER_TEMP/s3.txt" || { echo "the real-server test did not run"; docker logs s3 | tail -40; exit 1; }
+          python -m pytest -q tests/test_storage.py tests/test_pointer.py -k real_server -rs | tee "$RUNNER_TEMP/s3.txt"
+          grep -q "2 passed" "$RUNNER_TEMP/s3.txt" || { echo "the real-server tests did not all run"; docker logs s3 | tail -40; exit 1; }
       - name: End-to-end smoke test (synthetic data)
         run: bash scripts/ci_smoke.sh
       - name: Compose config (core + every profile) via the Makefile

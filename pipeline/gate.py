@@ -22,9 +22,10 @@ artifact still look this way on other users?"). It does not measure training ran
 variance) - two seeds of the same config ARE different artifacts and the gate judges the artifact.
 Less seed variance has to come from more stable training, not from a looser gate.
 
-Promotion = rewrite models/<cat>/production.json (the serving API follows this pointer) and append
-to production_history.jsonl. Rollback = point back to the previous entry. Model files are never
-copied or deleted, so every past model stays available.
+Promotion = move the production pointer (the serving API follows it) and log it in the history.
+Rollback = point back to the previous entry. Model files are never copied or deleted, so every past
+model stays available. Where the pointer lives (local files or S3, P2) is pipeline/pointer.py; in S3 mode
+a run must be published (pipeline/storage.py) before it can be promoted.
 """
 import json
 import math
@@ -33,6 +34,7 @@ import numpy as np
 from datetime import datetime, timezone
 from pathlib import Path
 
+from pipeline.pointer import manifest_sha256, pointer_store, registry_for
 from pipeline.steps import evaluate_models
 
 
@@ -70,9 +72,23 @@ def paired_bootstrap(cand: dict, prod: dict, metrics, n_boot=2000, confidence=0.
 
 
 def current_production(paths):
-    if paths.production_pointer.exists():
-        return json.loads(paths.production_pointer.read_text())
-    return None
+    return pointer_store(paths).read()
+
+
+def production_history(paths) -> list[dict]:
+    return pointer_store(paths).history()
+
+
+def resolve_run(paths, entry) -> Path:
+    """The run's folder on this machine. In S3 mode a run trained elsewhere is fetched (verified) into the cache
+    MODEL_CACHE_DIR (default .local/registry-cache)."""
+    p = run_path(paths, entry)
+    if p.exists() or pointer_store(paths).kind == "local":
+        return p
+    import os
+    model_dir, _ = registry_for(paths).fetch_run(entry["run_id"], Path(os.environ.get("MODEL_CACHE_DIR",
+                                                                                      ".local/registry-cache")))
+    return model_dir
 
 
 def gate(cfg, paths, rd, log=print) -> dict:
@@ -97,7 +113,7 @@ def gate(cfg, paths, rd, log=print) -> dict:
     elif prod["run_id"] == rd.run_dir.name:
         log("gate: this run IS production -> nothing to compare")
     else:
-        prod_dir = run_path(paths, prod)
+        prod_dir = resolve_run(paths, prod)
         # Leakage guard: production's final model was trained on everything before ITS test start.
         # If that is later than the candidate's test start, production has SEEN the candidate's test
         # window -> its score would be inflated, and the candidate is trained on older data anyway.
@@ -152,21 +168,24 @@ def promote(paths, run_dir: Path, reason: str, log=print) -> dict:
     entry = {"run_id": run_dir.name, "path": rel, "reason": reason,
              "promoted_at": datetime.now(timezone.utc).isoformat(),
              "metrics": {k: metrics.get(k) for k in ("ranker/all/ndcg@10", "ranker/all/recall@100")}}
-    paths.models.mkdir(parents=True, exist_ok=True)
-    tmp = paths.production_pointer.with_suffix(".tmp")
-    tmp.write_text(json.dumps(entry, indent=2))
-    tmp.replace(paths.production_pointer)                     # atomic swap: API never reads a half-written file
-    with paths.production_history.open("a") as f:
-        f.write(json.dumps(entry) + "\n")
-    log(f"promoted {run_dir.name} -> production ({reason})")
+    store = pointer_store(paths)
+    if store.kind == "s3":                                    # engines elsewhere can only load a published run
+        m = store.reg.run_manifest(run_dir.name)
+        if m is None:
+            raise RuntimeError(f"run {run_dir.name} is not in the registry: "
+                               f"python -m pipeline.storage publish-run {run_dir.name}")
+        entry |= {"path": f"runs/{run_dir.name}", "manifest_sha256": manifest_sha256(m), "gold": m["gold"]}
+    entry = store.write(entry)
+    log(f"promoted {run_dir.name} -> production v{entry['version']} ({reason}, {store.kind})")
     return entry
 
 
 def rollback(paths, log=print) -> dict:
-    if not paths.production_history.exists():
+    store = pointer_store(paths)
+    hist = store.history()
+    if not hist:
         raise RuntimeError("no production history")
-    hist = [json.loads(x) for x in paths.production_history.read_text().splitlines() if x.strip()]
-    cur = current_production(paths)
+    cur = store.read()
     previous = [h for h in hist if cur is None or h["run_id"] != cur["run_id"]]
     if not previous:
         raise RuntimeError("nothing to roll back to")

@@ -28,7 +28,8 @@ from pathlib import Path
 
 RUN_FILES = ["two_tower.pt", "item_emb.npy", "faiss.index", "faiss_meta.json", "ranker.txt", "ranker_meta.json",
              "serving_policy.json"]                      # what the engine loads (serve/recommender.py)
-RUN_OPTIONAL = ["metrics.json", "gate_report.json", "config.yaml"]   # provenance, small
+RUN_OPTIONAL = ["metrics.json", "gate_report.json", "config.yaml",   # provenance, small
+                "data/manifest.json"]                    # the run's time windows: the gate's leakage guard reads it
 GOLD_FILES = ["train.parquet", "val.parquet", "test.parquet", "user_map.parquet", "item_map.parquet",
               "item_features.parquet"]
 GOLD_OPTIONAL = ["item_types.parquet"]                   # + every item_text_emb_<encoder>.npy
@@ -155,6 +156,7 @@ class Registry:
         tmp.mkdir(parents=True)
         try:
             for name, want in manifest["files"].items():
+                (tmp / name).parent.mkdir(parents=True, exist_ok=True)      # data/manifest.json
                 self.s3.download_file(self.cfg.bucket, f"{prefix}/{name}", str(tmp / name))
                 size, digest = (tmp / name).stat().st_size, sha256_file(tmp / name)
                 if size != want["size"] or digest != want["sha256"]:

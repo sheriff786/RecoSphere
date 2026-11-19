@@ -1,6 +1,4 @@
 """Ops + admin: GET /health, GET /metrics, POST /admin/reload, GET /admin/summary, POST /admin/rollback."""
-import json
-
 from fastapi import APIRouter, Header, Response
 
 from serve import metrics as M
@@ -32,10 +30,9 @@ def admin_reload(force: bool = False, x_admin_token: str | None = Header(default
 def admin_summary(x_admin_token: str | None = Header(default=None)):
     mgr = STATE["mgr"]
     require_admin(mgr, x_admin_token)
-    hist = []
-    hp = mgr.cfg.models_root / "production_history.jsonl"
-    if hp.exists():
-        hist = [json.loads(x) for x in hp.read_text().splitlines() if x.strip()][-15:][::-1]
+    from pipeline.config import Paths, load_config
+    from pipeline.gate import production_history
+    hist = production_history(Paths(load_config(None, [f"category={mgr.cfg.category}"])))[-15:][::-1]
     return {"health": mgr.current.info() | mgr.info(), "live": M.snapshot(), "production_history": hist}
 
 
